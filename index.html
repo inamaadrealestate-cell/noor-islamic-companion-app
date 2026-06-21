@@ -2,12 +2,29 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <title>NoorQuran — Complete Islamic Companion App</title>
-    <meta name="description" content="A fully free, beautifully designed Islamic app with full Mushaf, audio recitations, Adhkar, Duas, and Qibla compass." />
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🕋</text></svg>">
+    <meta name="description" content="A fully free, beautifully designed Islamic app with Qur'an reading, audio recitations, Adhkar, Duas, prayer times, and Qibla compass." />
+
+    <meta name="theme-color" content="#020617" />
+    <meta name="color-scheme" content="dark light" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="NoorQuran" />
+    <meta name="application-name" content="NoorQuran" />
+
+    <meta property="og:title" content="NoorQuran — Complete Islamic Companion App" />
+    <meta property="og:description" content="Read Qur'an, listen to recitations, track Adhkar, view prayer times, and find Qibla direction." />
+    <meta property="og:type" content="website" />
+    <meta property="og:image" content="/icons/icon-512.png" />
+
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" href="/icons/noor-icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
   </head>
   <body class="bg-slate-900 text-slate-100 antialiased selection:bg-emerald-600 selection:text-white">
+    <noscript>NoorQuran requires JavaScript to run.</noscript>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
