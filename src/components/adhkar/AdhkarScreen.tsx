@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import { ADHKAR_CATEGORIES, DUAS_LIST, type DhikrCategory, type DhikrItem, type DuaItem } from '../../lib/adhkarData';
 import { Storage } from '../../lib/supabase';
+import { getAdhkarReminderSettings, requestPrayerNotificationPermission, saveAdhkarReminderSettings, type NoorAdhkarReminderSettings } from '../../lib/pwa';
 
 interface AdhkarScreenProps {
   isLightMode: boolean;
@@ -104,6 +105,7 @@ export default function AdhkarScreen({ isLightMode }: AdhkarScreenProps) {
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [notificationsEnabled, setNotificationsEnabled] = useState<boolean>(false);
+  const [reminderSettings, setReminderSettings] = useState<NoorAdhkarReminderSettings>(() => getAdhkarReminderSettings());
   const [streak, setStreak] = useState<number>(0);
   const [toast, setToast] = useState<string>('');
 
@@ -111,8 +113,19 @@ export default function AdhkarScreen({ isLightMode }: AdhkarScreenProps) {
 
   useEffect(() => {
     setCounts(Storage.getAdhkarProgress(todayKey));
-    setNotificationsEnabled(localStorage.getItem('noor_adhkar_notif') === 'true');
+    const savedReminderSettings = getAdhkarReminderSettings();
+    setReminderSettings(savedReminderSettings);
+    setNotificationsEnabled(savedReminderSettings.enabled || localStorage.getItem('noor_adhkar_notif') === 'true');
     setStreak(calculateLocalStreak());
+
+    const handleReminderChange = () => {
+      const nextReminderSettings = getAdhkarReminderSettings();
+      setReminderSettings(nextReminderSettings);
+      setNotificationsEnabled(nextReminderSettings.enabled);
+    };
+
+    window.addEventListener('noor-adhkar-reminders-changed', handleReminderChange);
+    return () => window.removeEventListener('noor-adhkar-reminders-changed', handleReminderChange);
   }, [todayKey]);
 
   const showToast = (message: string) => {
@@ -211,19 +224,22 @@ export default function AdhkarScreen({ isLightMode }: AdhkarScreenProps) {
   };
 
   const toggleNotifications = async () => {
-    const next = !notificationsEnabled;
+    const next = !reminderSettings.enabled;
 
-    if (next && 'Notification' in window) {
-      const permission = await Notification.requestPermission();
-      if (permission === 'denied') {
-        showToast('Notification permission was denied');
+    if (next) {
+      const result = await requestPrayerNotificationPermission();
+      if (result.status !== 'granted') {
+        showToast(result.message);
         return;
       }
     }
 
+    const updatedSettings = { ...reminderSettings, enabled: next };
+    setReminderSettings(updatedSettings);
+    saveAdhkarReminderSettings(updatedSettings);
     setNotificationsEnabled(next);
     localStorage.setItem('noor_adhkar_notif', String(next));
-    showToast(next ? 'Reminder preference saved' : 'Reminder preference turned off');
+    showToast(next ? 'Adhkar reminders enabled' : 'Adhkar reminders turned off');
   };
 
   const copyText = async (text: string) => {
@@ -311,7 +327,7 @@ export default function AdhkarScreen({ isLightMode }: AdhkarScreenProps) {
                     ? 'border-emerald-300 bg-emerald-500 text-white shadow-lg'
                     : 'border-white/20 bg-white/10 text-emerald-100 hover:bg-white/15'
                 }`}
-                title={notificationsEnabled ? 'Reminder preference enabled' : 'Enable reminder preference'}
+                title={notificationsEnabled ? 'Adhkar reminders enabled' : 'Enable adhkar reminders'}
               >
                 <Bell className={`h-5 w-5 ${notificationsEnabled ? 'fill-current' : ''}`} />
               </button>
@@ -337,7 +353,7 @@ export default function AdhkarScreen({ isLightMode }: AdhkarScreenProps) {
           </div>
 
           <div className={`px-5 py-4 text-xs leading-relaxed ${mutedText}`}>
-            Track your daily adhkar locally on this device. Notification permission is saved as a preference; scheduled push reminders can be added later with a service worker.
+            Track your daily adhkar locally on this device. Reminders are {reminderSettings.enabled ? 'active' : 'off'} — morning {reminderSettings.morning.time}, evening {reminderSettings.evening.time}, and more times can be adjusted in Settings.
           </div>
         </div>
 

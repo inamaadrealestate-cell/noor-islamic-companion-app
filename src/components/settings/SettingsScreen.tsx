@@ -27,10 +27,16 @@ import {
 } from "../../lib/supabase";
 import { RECITERS_LIST } from "../../lib/audioData";
 import {
+  getAdhkarReminderSettings,
   getPrayerNotificationStatus,
   requestPrayerNotificationPermission,
+  resetAdhkarReminderSettings,
+  saveAdhkarReminderSettings,
+  showAdhkarReminderTest,
   showPrayerNotificationTest,
+  type NoorAdhkarReminderSettings,
   type NoorNotificationStatus,
+  type ReminderSlotId,
 } from "../../lib/pwa";
 
 interface SettingsScreenProps {
@@ -171,6 +177,8 @@ export default function SettingsScreen({
   const [notificationStatus, setNotificationStatus] =
     useState<NoorNotificationStatus>(() => getPrayerNotificationStatus());
   const [notificationTesting, setNotificationTesting] = useState(false);
+  const [reminderSettings, setReminderSettings] = useState<NoorAdhkarReminderSettings>(() => getAdhkarReminderSettings());
+  const [reminderTesting, setReminderTesting] = useState(false);
   const [reciterSearch, setReciterSearch] = useState("");
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const deviceId = getDeviceId();
@@ -214,6 +222,14 @@ export default function SettingsScreen({
 
   useEffect(() => {
     setNotificationStatus(getPrayerNotificationStatus());
+    setReminderSettings(getAdhkarReminderSettings());
+
+    const handleReminderChange = () => {
+      setReminderSettings(getAdhkarReminderSettings());
+    };
+
+    window.addEventListener("noor-adhkar-reminders-changed", handleReminderChange);
+    return () => window.removeEventListener("noor-adhkar-reminders-changed", handleReminderChange);
   }, []);
 
   const pageClasses = isLightMode
@@ -310,6 +326,97 @@ export default function SettingsScreen({
     } finally {
       setNotificationTesting(false);
     }
+  };
+
+  const saveReminderChanges = (
+    nextSettings: NoorAdhkarReminderSettings,
+    message = "Reminder schedule saved",
+  ) => {
+    setReminderSettings(nextSettings);
+    saveAdhkarReminderSettings(nextSettings);
+    showNotice(message);
+  };
+
+  const handleToggleAdhkarReminders = async () => {
+    if (reminderSettings.enabled) {
+      saveReminderChanges(
+        { ...reminderSettings, enabled: false },
+        "Adhkar reminders turned off",
+      );
+      return;
+    }
+
+    let status = getPrayerNotificationStatus();
+    if (status !== "granted") {
+      const result = await requestPrayerNotificationPermission();
+      status = result.status;
+      setNotificationStatus(status);
+
+      if (status !== "granted") {
+        showNotice(result.message, "warning");
+        return;
+      }
+    }
+
+    saveReminderChanges(
+      { ...reminderSettings, enabled: true },
+      "Adhkar reminders enabled",
+    );
+  };
+
+  const updateReminderSlot = (
+    slotId: ReminderSlotId,
+    patch: Partial<NoorAdhkarReminderSettings[ReminderSlotId]>,
+  ) => {
+    saveReminderChanges({
+      ...reminderSettings,
+      [slotId]: {
+        ...reminderSettings[slotId],
+        ...patch,
+      },
+    });
+  };
+
+  const updateAfterPrayerReminder = (
+    patch: Partial<NoorAdhkarReminderSettings["afterPrayer"]>,
+  ) => {
+    saveReminderChanges({
+      ...reminderSettings,
+      afterPrayer: {
+        ...reminderSettings.afterPrayer,
+        ...patch,
+      },
+    });
+  };
+
+  const handleTestAdhkarReminder = async () => {
+    setReminderTesting(true);
+    try {
+      let status = getPrayerNotificationStatus();
+      if (status !== "granted") {
+        const result = await requestPrayerNotificationPermission();
+        status = result.status;
+        setNotificationStatus(status);
+      }
+
+      const shown = await showAdhkarReminderTest();
+      showNotice(
+        shown
+          ? "Adhkar test reminder sent"
+          : "Allow notifications before testing reminders",
+        shown ? "success" : "warning",
+      );
+    } catch {
+      showNotice("Could not send the adhkar test reminder", "warning");
+    } finally {
+      setReminderTesting(false);
+    }
+  };
+
+  const handleResetReminderSchedule = () => {
+    const defaults = resetAdhkarReminderSettings();
+    setReminderSettings(defaults);
+    showNotice("Reminder schedule restored to default");
   };
 
   const notificationInfo = (() => {
@@ -803,6 +910,178 @@ export default function SettingsScreen({
                   </button>
                 )}
             </div>
+          </div>
+        </section>
+
+        <section className={`p-5 rounded-3xl border space-y-4 ${cardClasses}`}>
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <Bell className="w-5 h-5 text-emerald-400" />
+              <h3 className="font-extrabold text-base">Adhkar Reminder Schedule</h3>
+            </div>
+            <span
+              className={`rounded-xl px-3 py-1 text-[11px] font-black ${
+                reminderSettings.enabled
+                  ? "bg-emerald-600 text-white"
+                  : isLightMode
+                    ? "bg-slate-100 text-slate-500"
+                    : "bg-slate-800 text-slate-400"
+              }`}
+            >
+              {reminderSettings.enabled ? "Active" : "Off"}
+            </span>
+          </div>
+
+          <p className={`text-xs leading-relaxed ${mutedText}`}>
+            Schedule reminders for morning adhkar, evening adhkar, before sleep,
+            Friday Al-Kahf, and optional after-prayer adhkar reminders. Browser
+            reminders work best when the app is installed or recently opened.
+          </p>
+
+          <ToggleButton
+            label="Enable adhkar reminders"
+            enabled={reminderSettings.enabled && notificationStatus === "granted"}
+            isLightMode={isLightMode}
+            onClick={handleToggleAdhkarReminders}
+          />
+
+          <div className="space-y-3">
+            {([
+              {
+                id: "morning" as ReminderSlotId,
+                label: "Morning Adhkar",
+                note: "Recommended after Fajr until sunrise",
+              },
+              {
+                id: "evening" as ReminderSlotId,
+                label: "Evening Adhkar",
+                note: "Recommended after Asr until Maghrib",
+              },
+              {
+                id: "sleep" as ReminderSlotId,
+                label: "Before Sleep",
+                note: "A quiet reminder before bedtime",
+              },
+              {
+                id: "fridayKahf" as ReminderSlotId,
+                label: "Friday Al-Kahf",
+                note: "Only rings on Fridays",
+              },
+            ]).map((slot) => (
+              <div
+                key={slot.id}
+                className={`rounded-2xl border p-3 ${softPanel}`}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-extrabold">{slot.label}</p>
+                    <p className={`text-[11px] leading-relaxed ${mutedText}`}>{slot.note}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      updateReminderSlot(slot.id, {
+                        enabled: !reminderSettings[slot.id].enabled,
+                      })
+                    }
+                    className={`rounded-xl px-3 py-2 text-[11px] font-black active:scale-95 ${
+                      reminderSettings[slot.id].enabled
+                        ? "bg-emerald-600 text-white"
+                        : isLightMode
+                          ? "bg-white text-slate-500 border border-slate-200"
+                          : "bg-slate-900 text-slate-400 border border-slate-700"
+                    }`}
+                  >
+                    {reminderSettings[slot.id].enabled ? "On" : "Off"}
+                  </button>
+                </div>
+                <input
+                  type="time"
+                  value={reminderSettings[slot.id].time}
+                  onChange={(event) =>
+                    updateReminderSlot(slot.id, { time: event.target.value })
+                  }
+                  disabled={!reminderSettings[slot.id].enabled}
+                  className={`mt-3 w-full px-4 py-3 rounded-2xl text-sm font-extrabold border focus:outline-none focus:ring-2 disabled:opacity-50 ${inputClasses}`}
+                />
+              </div>
+            ))}
+          </div>
+
+          <div className={`rounded-2xl border p-3 ${softPanel}`}>
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-extrabold">After-prayer adhkar</p>
+                <p className={`text-[11px] leading-relaxed ${mutedText}`}>
+                  Uses your saved Salah city and calculation method, then reminds
+                  after Fajr, Dhuhr, Asr, Maghrib, and Isha.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() =>
+                  updateAfterPrayerReminder({
+                    enabled: !reminderSettings.afterPrayer.enabled,
+                  })
+                }
+                className={`rounded-xl px-3 py-2 text-[11px] font-black active:scale-95 ${
+                  reminderSettings.afterPrayer.enabled
+                    ? "bg-emerald-600 text-white"
+                    : isLightMode
+                      ? "bg-white text-slate-500 border border-slate-200"
+                      : "bg-slate-900 text-slate-400 border border-slate-700"
+                }`}
+              >
+                {reminderSettings.afterPrayer.enabled ? "On" : "Off"}
+              </button>
+            </div>
+            <label className="mt-3 block text-[11px] font-extrabold uppercase tracking-wider text-emerald-500">
+              Reminder delay after prayer
+            </label>
+            <select
+              value={reminderSettings.afterPrayer.delayMinutes}
+              onChange={(event) =>
+                updateAfterPrayerReminder({
+                  delayMinutes: Number(event.target.value),
+                })
+              }
+              disabled={!reminderSettings.afterPrayer.enabled}
+              className={`mt-2 w-full px-4 py-3 rounded-2xl text-sm font-semibold border focus:outline-none focus:ring-2 disabled:opacity-50 ${inputClasses}`}
+            >
+              {[5, 10, 15, 20, 30, 45, 60].map((minutes) => (
+                <option key={minutes} value={minutes}>
+                  {minutes} minutes after prayer
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <button
+              type="button"
+              onClick={handleTestAdhkarReminder}
+              disabled={reminderTesting}
+              className="rounded-2xl bg-emerald-600 px-4 py-3 text-xs font-extrabold text-white active:scale-95 disabled:opacity-60"
+            >
+              {reminderTesting ? "Sending..." : "Send test adhkar reminder"}
+            </button>
+            <button
+              type="button"
+              onClick={handleResetReminderSchedule}
+              className={`rounded-2xl border px-4 py-3 text-xs font-extrabold active:scale-95 ${softPanel} ${mutedText}`}
+            >
+              Reset reminder times
+            </button>
+          </div>
+
+          <div className={`rounded-2xl border p-3 text-xs leading-relaxed ${
+            isLightMode
+              ? "border-amber-200 bg-amber-50 text-amber-800"
+              : "border-amber-800/40 bg-amber-950/20 text-amber-200"
+          }`}>
+            For full background reliability, install NoorQuran as an app and keep
+            browser notifications allowed. Web browsers may pause reminders when
+            the site has been fully closed for a long time.
           </div>
         </section>
 
