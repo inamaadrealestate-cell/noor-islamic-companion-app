@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Moon,
   Sun,
@@ -18,9 +18,19 @@ import {
   Database,
   Sliders,
   Smartphone,
-} from 'lucide-react';
-import { DEFAULT_SETTINGS, UserSettings, getDeviceId } from '../../lib/supabase';
-import { RECITERS_LIST } from '../../lib/audioData';
+} from "lucide-react";
+import {
+  DEFAULT_SETTINGS,
+  UserSettings,
+  getDeviceId,
+} from "../../lib/supabase";
+import { RECITERS_LIST } from "../../lib/audioData";
+import {
+  getPrayerNotificationStatus,
+  requestPrayerNotificationPermission,
+  showPrayerNotificationTest,
+  type NoorNotificationStatus,
+} from "../../lib/pwa";
 
 interface SettingsScreenProps {
   settings: UserSettings;
@@ -29,40 +39,64 @@ interface SettingsScreenProps {
 }
 
 type Notice = {
-  type: 'success' | 'warning';
+  type: "success" | "warning";
   message: string;
 };
 
 const STORAGE_KEYS = {
-  settings: 'noor_settings',
-  progress: 'noor_progress',
-  bookmarks: 'noor_bookmarks',
-  device: 'noor_device_id',
-  prayerLocation: 'noor_prayer_location',
-  qiblaLocation: 'noor_qibla_location',
+  settings: "noor_settings",
+  progress: "noor_progress",
+  bookmarks: "noor_bookmarks",
+  device: "noor_device_id",
+  prayerLocation: "noor_prayer_location",
+  qiblaLocation: "noor_qibla_location",
 };
 
 const TRANSLATIONS = [
-  { id: 'en.sahih', name: 'English — Sahih International', note: 'Clear modern English' },
-  { id: 'en.yusufali', name: 'English — Yusuf Ali', note: 'Classic English style' },
-  { id: 'en.pickthall', name: 'English — Marmaduke Pickthall', note: 'Traditional English style' },
-  { id: 'en.asad', name: 'English — Muhammad Asad', note: 'Reflective commentary style' },
-  { id: 'fr.hamidullah', name: 'French — Muhammad Hamidullah', note: 'French translation' },
-  { id: 'ur.jalandhry', name: 'Urdu — Fateh Muhammad Jalandhry', note: 'Urdu translation' },
+  {
+    id: "en.sahih",
+    name: "English — Sahih International",
+    note: "Clear modern English",
+  },
+  {
+    id: "en.yusufali",
+    name: "English — Yusuf Ali",
+    note: "Classic English style",
+  },
+  {
+    id: "en.pickthall",
+    name: "English — Marmaduke Pickthall",
+    note: "Traditional English style",
+  },
+  {
+    id: "en.asad",
+    name: "English — Muhammad Asad",
+    note: "Reflective commentary style",
+  },
+  {
+    id: "fr.hamidullah",
+    name: "French — Muhammad Hamidullah",
+    note: "French translation",
+  },
+  {
+    id: "ur.jalandhry",
+    name: "Urdu — Fateh Muhammad Jalandhry",
+    note: "Urdu translation",
+  },
 ];
 
 const CALCULATION_METHODS = [
-  { id: 4, name: 'Umm al-Qura University, Makkah' },
-  { id: 2, name: 'Islamic Society of North America (ISNA)' },
-  { id: 3, name: 'Muslim World League (MWL)' },
-  { id: 5, name: 'Egyptian General Authority of Survey' },
-  { id: 7, name: 'Institute of Geophysics, University of Tehran' },
-  { id: 8, name: 'Gulf Region' },
-  { id: 9, name: 'Kuwait' },
-  { id: 10, name: 'Qatar' },
-  { id: 11, name: 'Majlis Ugama Islam Singapura' },
-  { id: 12, name: 'Union Organization Islamic de France' },
-  { id: 13, name: 'Diyanet İşleri Başkanlığı, Turkey' },
+  { id: 4, name: "Umm al-Qura University, Makkah" },
+  { id: 2, name: "Islamic Society of North America (ISNA)" },
+  { id: 3, name: "Muslim World League (MWL)" },
+  { id: 5, name: "Egyptian General Authority of Survey" },
+  { id: 7, name: "Institute of Geophysics, University of Tehran" },
+  { id: 8, name: "Gulf Region" },
+  { id: 9, name: "Kuwait" },
+  { id: 10, name: "Qatar" },
+  { id: 11, name: "Majlis Ugama Islam Singapura" },
+  { id: 12, name: "Union Organization Islamic de France" },
+  { id: 13, name: "Diyanet İşleri Başkanlığı, Turkey" },
 ];
 
 function safeLocalGet(key: string): string | null {
@@ -90,7 +124,7 @@ function getNoorStorageKeys(): string[] {
     const keys: string[] = [];
     for (let i = 0; i < localStorage.length; i += 1) {
       const key = localStorage.key(i);
-      if (key && (key.startsWith('noor_') || key.startsWith('download_'))) {
+      if (key && (key.startsWith("noor_") || key.startsWith("download_"))) {
         keys.push(key);
       }
     }
@@ -106,56 +140,90 @@ function bytesToReadable(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function estimateStorageUsage(): { keys: number; bytes: number; downloads: number; adhkarDays: number } {
+function estimateStorageUsage(): {
+  keys: number;
+  bytes: number;
+  downloads: number;
+  adhkarDays: number;
+} {
   const keys = getNoorStorageKeys();
-  const bytes = keys.reduce((total, key) => total + key.length + (safeLocalGet(key)?.length || 0), 0);
+  const bytes = keys.reduce(
+    (total, key) => total + key.length + (safeLocalGet(key)?.length || 0),
+    0,
+  );
   return {
     keys: keys.length,
     bytes,
-    downloads: keys.filter((key) => key.startsWith('download_')).length,
-    adhkarDays: keys.filter((key) => key.startsWith('noor_adhkar_')).length,
+    downloads: keys.filter((key) => key.startsWith("download_")).length,
+    adhkarDays: keys.filter((key) => key.startsWith("noor_adhkar_")).length,
   };
 }
 
-export default function SettingsScreen({ settings, onUpdateSettings, isLightMode }: SettingsScreenProps) {
+export default function SettingsScreen({
+  settings,
+  onUpdateSettings,
+  isLightMode,
+}: SettingsScreenProps) {
   const [notice, setNotice] = useState<Notice | null>(null);
   const [confirmReset, setConfirmReset] = useState(false);
   const [storageStats, setStorageStats] = useState(estimateStorageUsage());
+  const [notificationStatus, setNotificationStatus] =
+    useState<NoorNotificationStatus>(() => getPrayerNotificationStatus());
+  const [notificationTesting, setNotificationTesting] = useState(false);
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const deviceId = getDeviceId();
 
   const selectedTranslation = useMemo(
-    () => TRANSLATIONS.find((translation) => translation.id === settings.translation_edition) || TRANSLATIONS[0],
+    () =>
+      TRANSLATIONS.find(
+        (translation) => translation.id === settings.translation_edition,
+      ) || TRANSLATIONS[0],
     [settings.translation_edition],
   );
 
   const selectedReciter = useMemo(
-    () => RECITERS_LIST.find((reciter) => reciter.id === settings.default_reciter) || RECITERS_LIST[0],
+    () =>
+      RECITERS_LIST.find(
+        (reciter) => reciter.id === settings.default_reciter,
+      ) || RECITERS_LIST[0],
     [settings.default_reciter],
   );
 
   const selectedMethod = useMemo(
-    () => CALCULATION_METHODS.find((method) => method.id === settings.calculation_method) || CALCULATION_METHODS[0],
+    () =>
+      CALCULATION_METHODS.find(
+        (method) => method.id === settings.calculation_method,
+      ) || CALCULATION_METHODS[0],
     [settings.calculation_method],
   );
 
-  const pageClasses = isLightMode ? 'bg-slate-50 text-slate-900' : 'bg-slate-900 text-white';
-  const headerClasses = isLightMode ? 'bg-slate-100/95 border-slate-200' : 'bg-slate-900/95 border-slate-800';
-  const cardClasses = isLightMode
-    ? 'bg-white border-slate-200 shadow-sm text-slate-900'
-    : 'bg-slate-800/60 border-slate-700/80 shadow-md text-white';
-  const mutedText = isLightMode ? 'text-slate-600' : 'text-slate-400';
-  const softPanel = isLightMode ? 'bg-slate-50 border-slate-200' : 'bg-slate-900/70 border-slate-700';
-  const inputClasses = isLightMode
-    ? 'bg-white border-slate-300 text-slate-900 focus:ring-emerald-500'
-    : 'bg-slate-950 border-slate-700 text-white focus:ring-emerald-600';
+  useEffect(() => {
+    setNotificationStatus(getPrayerNotificationStatus());
+  }, []);
 
-  const showNotice = (message: string, type: Notice['type'] = 'success') => {
+  const pageClasses = isLightMode
+    ? "bg-slate-50 text-slate-900"
+    : "bg-slate-900 text-white";
+  const headerClasses = isLightMode
+    ? "bg-slate-100/95 border-slate-200"
+    : "bg-slate-900/95 border-slate-800";
+  const cardClasses = isLightMode
+    ? "bg-white border-slate-200 shadow-sm text-slate-900"
+    : "bg-slate-800/60 border-slate-700/80 shadow-md text-white";
+  const mutedText = isLightMode ? "text-slate-600" : "text-slate-400";
+  const softPanel = isLightMode
+    ? "bg-slate-50 border-slate-200"
+    : "bg-slate-900/70 border-slate-700";
+  const inputClasses = isLightMode
+    ? "bg-white border-slate-300 text-slate-900 focus:ring-emerald-500"
+    : "bg-slate-950 border-slate-700 text-white focus:ring-emerald-600";
+
+  const showNotice = (message: string, type: Notice["type"] = "success") => {
     setNotice({ message, type });
     window.setTimeout(() => setNotice(null), 3200);
   };
 
-  const updateSettings = (next: UserSettings, message = 'Settings updated') => {
+  const updateSettings = (next: UserSettings, message = "Settings updated") => {
     onUpdateSettings(next);
     window.setTimeout(() => setStorageStats(estimateStorageUsage()), 50);
     showNotice(message);
@@ -163,24 +231,103 @@ export default function SettingsScreen({ settings, onUpdateSettings, isLightMode
 
   const handleClearDownloadCache = () => {
     getNoorStorageKeys()
-      .filter((key) => key.startsWith('download_'))
+      .filter((key) => key.startsWith("download_"))
       .forEach(safeLocalRemove);
     setStorageStats(estimateStorageUsage());
-    showNotice('Audio download cache flags cleared');
+    showNotice("Audio download cache flags cleared");
   };
 
   const handleResetSettings = () => {
-    updateSettings(DEFAULT_SETTINGS, 'Settings restored to default');
+    updateSettings(DEFAULT_SETTINGS, "Settings restored to default");
   };
 
   const handleCopyDeviceId = async () => {
     try {
       await navigator.clipboard.writeText(deviceId);
-      showNotice('Anonymous device ID copied');
+      showNotice("Anonymous device ID copied");
     } catch {
-      showNotice('Could not copy device ID on this browser', 'warning');
+      showNotice("Could not copy device ID on this browser", "warning");
     }
   };
+
+  const handleTogglePrayerNotifications = async () => {
+    if (settings.prayer_notifications) {
+      updateSettings(
+        { ...settings, prayer_notifications: false },
+        "Prayer notifications turned off",
+      );
+      return;
+    }
+
+    const result = await requestPrayerNotificationPermission();
+    setNotificationStatus(result.status);
+
+    if (result.status === "granted") {
+      updateSettings(
+        { ...settings, prayer_notifications: true },
+        result.message,
+      );
+      return;
+    }
+
+    updateSettings(
+      { ...settings, prayer_notifications: false },
+      result.message,
+    );
+  };
+
+  const handleTestPrayerNotification = async () => {
+    setNotificationTesting(true);
+    try {
+      const shown = await showPrayerNotificationTest();
+      setNotificationStatus(getPrayerNotificationStatus());
+      showNotice(
+        shown
+          ? "Test notification sent"
+          : "Allow notifications first before testing",
+        shown ? "success" : "warning",
+      );
+    } catch {
+      showNotice(
+        "Could not send the test notification on this browser",
+        "warning",
+      );
+    } finally {
+      setNotificationTesting(false);
+    }
+  };
+
+  const notificationInfo = (() => {
+    if (notificationStatus === "unsupported") {
+      return {
+        tone: "warning" as const,
+        title: "Notifications are not supported here",
+        body: "This browser does not support web notifications. Try Chrome or Edge, preferably after installing the app.",
+      };
+    }
+
+    if (notificationStatus === "denied") {
+      return {
+        tone: "warning" as const,
+        title: "Notifications are blocked",
+        body: "Open the browser site settings for NoorQuran and change Notifications to Allow, then return here and enable it again.",
+      };
+    }
+
+    if (notificationStatus === "granted" && settings.prayer_notifications) {
+      return {
+        tone: "success" as const,
+        title: "Notifications are ready",
+        body: "The service worker is active and NoorQuran has permission to show prayer notifications on this device. For best background reliability, install the app.",
+      };
+    }
+
+    return {
+      tone: "warning" as const,
+      title: "Permission needed",
+      body: "Turn on prayer notifications to ask your browser for permission. The service worker is already included in the app.",
+    };
+  })();
 
   const handleExportBackup = () => {
     const data: Record<string, string | null> = {};
@@ -189,21 +336,23 @@ export default function SettingsScreen({ settings, onUpdateSettings, isLightMode
     });
 
     const backup = {
-      app: 'NoorQuran',
+      app: "NoorQuran",
       exported_at: new Date().toISOString(),
       data,
     };
 
-    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+    const blob = new Blob([JSON.stringify(backup, null, 2)], {
+      type: "application/json",
+    });
     const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
+    const link = document.createElement("a");
     link.href = url;
     link.download = `noorquran-backup-${new Date().toISOString().slice(0, 10)}.json`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
-    showNotice('Backup file exported');
+    showNotice("Backup file exported");
   };
 
   const handleImportBackup = async (file: File | undefined) => {
@@ -211,15 +360,21 @@ export default function SettingsScreen({ settings, onUpdateSettings, isLightMode
 
     try {
       const text = await file.text();
-      const parsed = JSON.parse(text) as { app?: string; data?: Record<string, unknown> };
+      const parsed = JSON.parse(text) as {
+        app?: string;
+        data?: Record<string, unknown>;
+      };
 
-      if (parsed.app !== 'NoorQuran' || !parsed.data) {
-        showNotice('Invalid NoorQuran backup file', 'warning');
+      if (parsed.app !== "NoorQuran" || !parsed.data) {
+        showNotice("Invalid NoorQuran backup file", "warning");
         return;
       }
 
       Object.entries(parsed.data).forEach(([key, value]) => {
-        if ((key.startsWith('noor_') || key.startsWith('download_')) && typeof value === 'string') {
+        if (
+          (key.startsWith("noor_") || key.startsWith("download_")) &&
+          typeof value === "string"
+        ) {
           safeLocalSet(key, value);
         }
       });
@@ -227,23 +382,31 @@ export default function SettingsScreen({ settings, onUpdateSettings, isLightMode
       const importedSettingsRaw = safeLocalGet(STORAGE_KEYS.settings);
       if (importedSettingsRaw) {
         try {
-          onUpdateSettings({ ...DEFAULT_SETTINGS, ...JSON.parse(importedSettingsRaw) });
+          onUpdateSettings({
+            ...DEFAULT_SETTINGS,
+            ...JSON.parse(importedSettingsRaw),
+          });
         } catch {}
       }
 
       setStorageStats(estimateStorageUsage());
-      showNotice('Backup imported successfully. Refresh if any screen still shows old data.');
+      showNotice(
+        "Backup imported successfully. Refresh if any screen still shows old data.",
+      );
     } catch {
-      showNotice('Backup import failed. Please choose a valid JSON backup.', 'warning');
+      showNotice(
+        "Backup import failed. Please choose a valid JSON backup.",
+        "warning",
+      );
     } finally {
-      if (importInputRef.current) importInputRef.current.value = '';
+      if (importInputRef.current) importInputRef.current.value = "";
     }
   };
 
   const handleFactoryReset = () => {
     if (!confirmReset) {
       setConfirmReset(true);
-      showNotice('Tap factory reset again to confirm', 'warning');
+      showNotice("Tap factory reset again to confirm", "warning");
       window.setTimeout(() => setConfirmReset(false), 5000);
       return;
     }
@@ -252,18 +415,28 @@ export default function SettingsScreen({ settings, onUpdateSettings, isLightMode
     onUpdateSettings(DEFAULT_SETTINGS);
     setStorageStats(estimateStorageUsage());
     setConfirmReset(false);
-    showNotice('Local NoorQuran data cleared. Refresh the app for a clean start.');
+    showNotice(
+      "Local NoorQuran data cleared. Refresh the app for a clean start.",
+    );
   };
 
   return (
     <div className={`max-w-lg mx-auto pb-32 min-h-screen ${pageClasses}`}>
-      <div className={`sticky top-0 z-30 border-b backdrop-blur-md px-4 py-3 ${headerClasses}`}>
+      <div
+        className={`sticky top-0 z-30 border-b backdrop-blur-md px-4 py-3 ${headerClasses}`}
+      >
         <div className="flex items-center justify-between gap-3">
           <div>
-            <h1 className="text-xl font-extrabold text-emerald-500 tracking-tight">App Settings</h1>
-            <p className={`text-[11px] font-semibold ${mutedText}`}>Privacy, reading, audio, prayer, and device backup</p>
+            <h1 className="text-xl font-extrabold text-emerald-500 tracking-tight">
+              App Settings
+            </h1>
+            <p className={`text-[11px] font-semibold ${mutedText}`}>
+              Privacy, reading, audio, prayer, and device backup
+            </p>
           </div>
-          <span className={`text-[10px] font-extrabold uppercase tracking-widest px-3 py-1.5 rounded-xl border ${softPanel}`}>
+          <span
+            className={`text-[10px] font-extrabold uppercase tracking-widest px-3 py-1.5 rounded-xl border ${softPanel}`}
+          >
             v1.1
           </span>
         </div>
@@ -273,9 +446,9 @@ export default function SettingsScreen({ settings, onUpdateSettings, isLightMode
         <div className="fixed top-16 left-0 right-0 z-50 px-4 pointer-events-none">
           <div
             className={`max-w-lg mx-auto px-4 py-3 rounded-2xl border shadow-xl text-sm font-bold flex items-center gap-2 ${
-              notice.type === 'success'
-                ? 'bg-emerald-600 text-white border-emerald-500'
-                : 'bg-amber-500 text-slate-950 border-amber-400'
+              notice.type === "success"
+                ? "bg-emerald-600 text-white border-emerald-500"
+                : "bg-amber-500 text-slate-950 border-amber-400"
             }`}
           >
             <Check className="w-4 h-4 flex-shrink-0" />
@@ -293,25 +466,40 @@ export default function SettingsScreen({ settings, onUpdateSettings, isLightMode
                 <Sparkles className="w-6 h-6 text-amber-300" />
               </div>
               <div>
-                <p className="text-xs font-extrabold text-emerald-100 uppercase tracking-widest">NoorQuran</p>
-                <h2 className="text-xl font-extrabold leading-tight">Complete Islamic Companion</h2>
+                <p className="text-xs font-extrabold text-emerald-100 uppercase tracking-widest">
+                  NoorQuran
+                </p>
+                <h2 className="text-xl font-extrabold leading-tight">
+                  Complete Islamic Companion
+                </h2>
               </div>
             </div>
             <p className="text-sm text-emerald-50/90 leading-relaxed">
-              Your settings are saved on this device first. Supabase sync can work later when real environment keys and tables are configured.
+              Your settings are saved on this device first. Supabase sync can
+              work later when real environment keys and tables are configured.
             </p>
             <div className="grid grid-cols-3 gap-2 text-center">
               <div className="rounded-2xl bg-white/10 border border-white/10 p-3">
                 <p className="text-lg font-extrabold">{storageStats.keys}</p>
-                <p className="text-[10px] text-emerald-100 uppercase font-bold">Items</p>
+                <p className="text-[10px] text-emerald-100 uppercase font-bold">
+                  Items
+                </p>
               </div>
               <div className="rounded-2xl bg-white/10 border border-white/10 p-3">
-                <p className="text-lg font-extrabold">{bytesToReadable(storageStats.bytes)}</p>
-                <p className="text-[10px] text-emerald-100 uppercase font-bold">Storage</p>
+                <p className="text-lg font-extrabold">
+                  {bytesToReadable(storageStats.bytes)}
+                </p>
+                <p className="text-[10px] text-emerald-100 uppercase font-bold">
+                  Storage
+                </p>
               </div>
               <div className="rounded-2xl bg-white/10 border border-white/10 p-3">
-                <p className="text-lg font-extrabold">{storageStats.adhkarDays}</p>
-                <p className="text-[10px] text-emerald-100 uppercase font-bold">Adhkar Days</p>
+                <p className="text-lg font-extrabold">
+                  {storageStats.adhkarDays}
+                </p>
+                <p className="text-[10px] text-emerald-100 uppercase font-bold">
+                  Adhkar Days
+                </p>
               </div>
             </div>
           </div>
@@ -319,25 +507,40 @@ export default function SettingsScreen({ settings, onUpdateSettings, isLightMode
 
         <section className={`p-5 rounded-3xl border space-y-4 ${cardClasses}`}>
           <div className="flex items-center gap-2.5">
-            {isLightMode ? <Sun className="w-5 h-5 text-amber-500" /> : <Moon className="w-5 h-5 text-emerald-400" />}
+            {isLightMode ? (
+              <Sun className="w-5 h-5 text-amber-500" />
+            ) : (
+              <Moon className="w-5 h-5 text-emerald-400" />
+            )}
             <h3 className="font-extrabold text-base">Appearance Theme</h3>
           </div>
-          <p className={`text-xs leading-relaxed ${mutedText}`}>Choose the display mode that is easiest on your eyes.</p>
+          <p className={`text-xs leading-relaxed ${mutedText}`}>
+            Choose the display mode that is easiest on your eyes.
+          </p>
           <div className="grid grid-cols-2 gap-3">
-            {(['dark', 'light'] as const).map((theme) => {
+            {(["dark", "light"] as const).map((theme) => {
               const active = settings.theme === theme;
               return (
                 <button
                   key={theme}
-                  onClick={() => updateSettings({ ...settings, theme }, `${theme === 'dark' ? 'Dark' : 'Light'} mode enabled`)}
+                  onClick={() =>
+                    updateSettings(
+                      { ...settings, theme },
+                      `${theme === "dark" ? "Dark" : "Light"} mode enabled`,
+                    )
+                  }
                   className={`p-4 rounded-2xl border font-extrabold text-sm flex items-center justify-center gap-2 transition-all active:scale-95 ${
                     active
-                      ? 'bg-emerald-600 border-emerald-500 text-white shadow-lg shadow-emerald-950/30'
+                      ? "bg-emerald-600 border-emerald-500 text-white shadow-lg shadow-emerald-950/30"
                       : `${softPanel} ${mutedText} hover:border-emerald-500/60`
                   }`}
                 >
-                  {theme === 'dark' ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
-                  {theme === 'dark' ? 'Dark Mode' : 'Light Mode'}
+                  {theme === "dark" ? (
+                    <Moon className="w-4 h-4" />
+                  ) : (
+                    <Sun className="w-4 h-4" />
+                  )}
+                  {theme === "dark" ? "Dark Mode" : "Light Mode"}
                 </button>
               );
             })}
@@ -351,10 +554,17 @@ export default function SettingsScreen({ settings, onUpdateSettings, isLightMode
           </div>
 
           <div className={`p-3 rounded-2xl border ${softPanel}`}>
-            <label className="text-xs font-extrabold uppercase tracking-wider text-emerald-500">Translation</label>
+            <label className="text-xs font-extrabold uppercase tracking-wider text-emerald-500">
+              Translation
+            </label>
             <select
               value={settings.translation_edition}
-              onChange={(event) => updateSettings({ ...settings, translation_edition: event.target.value }, 'Translation changed')}
+              onChange={(event) =>
+                updateSettings(
+                  { ...settings, translation_edition: event.target.value },
+                  "Translation changed",
+                )
+              }
               className={`mt-2 w-full px-4 py-3 rounded-2xl text-sm font-semibold border focus:outline-none focus:ring-2 ${inputClasses}`}
             >
               {TRANSLATIONS.map((translation) => (
@@ -363,7 +573,9 @@ export default function SettingsScreen({ settings, onUpdateSettings, isLightMode
                 </option>
               ))}
             </select>
-            <p className={`mt-2 text-[11px] leading-relaxed ${mutedText}`}>{selectedTranslation.note}</p>
+            <p className={`mt-2 text-[11px] leading-relaxed ${mutedText}`}>
+              {selectedTranslation.note}
+            </p>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -373,7 +585,12 @@ export default function SettingsScreen({ settings, onUpdateSettings, isLightMode
               min={20}
               max={44}
               isLightMode={isLightMode}
-              onChange={(value) => updateSettings({ ...settings, arabic_font_size: value }, 'Arabic font updated')}
+              onChange={(value) =>
+                updateSettings(
+                  { ...settings, arabic_font_size: value },
+                  "Arabic font updated",
+                )
+              }
             />
             <FontControl
               label="Translation font"
@@ -381,7 +598,12 @@ export default function SettingsScreen({ settings, onUpdateSettings, isLightMode
               min={12}
               max={24}
               isLightMode={isLightMode}
-              onChange={(value) => updateSettings({ ...settings, translation_font_size: value }, 'Translation font updated')}
+              onChange={(value) =>
+                updateSettings(
+                  { ...settings, translation_font_size: value },
+                  "Translation font updated",
+                )
+              }
             />
           </div>
 
@@ -390,13 +612,23 @@ export default function SettingsScreen({ settings, onUpdateSettings, isLightMode
               label="Show translation"
               enabled={settings.show_translation}
               isLightMode={isLightMode}
-              onClick={() => updateSettings({ ...settings, show_translation: !settings.show_translation })}
+              onClick={() =>
+                updateSettings({
+                  ...settings,
+                  show_translation: !settings.show_translation,
+                })
+              }
             />
             <ToggleButton
               label="Show transliteration"
               enabled={settings.show_transliteration}
               isLightMode={isLightMode}
-              onClick={() => updateSettings({ ...settings, show_transliteration: !settings.show_transliteration })}
+              onClick={() =>
+                updateSettings({
+                  ...settings,
+                  show_transliteration: !settings.show_transliteration,
+                })
+              }
             />
           </div>
         </section>
@@ -408,7 +640,12 @@ export default function SettingsScreen({ settings, onUpdateSettings, isLightMode
           </div>
           <select
             value={settings.default_reciter}
-            onChange={(event) => updateSettings({ ...settings, default_reciter: event.target.value }, 'Default reciter changed')}
+            onChange={(event) =>
+              updateSettings(
+                { ...settings, default_reciter: event.target.value },
+                "Default reciter changed",
+              )
+            }
             className={`w-full px-4 py-3 rounded-2xl text-sm font-semibold border focus:outline-none focus:ring-2 ${inputClasses}`}
           >
             {RECITERS_LIST.map((reciter) => (
@@ -417,13 +654,23 @@ export default function SettingsScreen({ settings, onUpdateSettings, isLightMode
               </option>
             ))}
           </select>
-          <div className={`flex items-center gap-3 p-3 rounded-2xl border ${softPanel}`}>
+          <div
+            className={`flex items-center gap-3 p-3 rounded-2xl border ${softPanel}`}
+          >
             <div className="w-12 h-12 rounded-2xl overflow-hidden bg-emerald-900 flex-shrink-0">
-              <img src={selectedReciter.photoUrl} alt={selectedReciter.name} className="w-full h-full object-cover opacity-90" />
+              <img
+                src={selectedReciter.photoUrl}
+                alt={selectedReciter.name}
+                className="w-full h-full object-cover opacity-90"
+              />
             </div>
             <div className="min-w-0">
-              <p className="text-sm font-extrabold truncate">{selectedReciter.name}</p>
-              <p className={`text-xs ${mutedText}`}>{selectedReciter.arabicName} • {selectedReciter.style}</p>
+              <p className="text-sm font-extrabold truncate">
+                {selectedReciter.name}
+              </p>
+              <p className={`text-xs ${mutedText}`}>
+                {selectedReciter.arabicName} • {selectedReciter.style}
+              </p>
             </div>
           </div>
         </section>
@@ -434,10 +681,20 @@ export default function SettingsScreen({ settings, onUpdateSettings, isLightMode
             <h3 className="font-extrabold text-base">Prayer Settings</h3>
           </div>
           <div className={`p-3 rounded-2xl border ${softPanel}`}>
-            <label className="text-xs font-extrabold uppercase tracking-wider text-emerald-500">Calculation Method</label>
+            <label className="text-xs font-extrabold uppercase tracking-wider text-emerald-500">
+              Calculation Method
+            </label>
             <select
               value={settings.calculation_method}
-              onChange={(event) => updateSettings({ ...settings, calculation_method: Number(event.target.value) }, 'Prayer method changed')}
+              onChange={(event) =>
+                updateSettings(
+                  {
+                    ...settings,
+                    calculation_method: Number(event.target.value),
+                  },
+                  "Prayer method changed",
+                )
+              }
               className={`mt-2 w-full px-4 py-3 rounded-2xl text-sm font-semibold border focus:outline-none focus:ring-2 ${inputClasses}`}
             >
               {CALCULATION_METHODS.map((method) => (
@@ -446,17 +703,43 @@ export default function SettingsScreen({ settings, onUpdateSettings, isLightMode
                 </option>
               ))}
             </select>
-            <p className={`mt-2 text-[11px] leading-relaxed ${mutedText}`}>Active: {selectedMethod.name}</p>
+            <p className={`mt-2 text-[11px] leading-relaxed ${mutedText}`}>
+              Active: {selectedMethod.name}
+            </p>
           </div>
           <ToggleButton
             label="Prayer notifications"
-            enabled={settings.prayer_notifications}
+            enabled={
+              settings.prayer_notifications && notificationStatus === "granted"
+            }
             isLightMode={isLightMode}
-            onClick={() => updateSettings({ ...settings, prayer_notifications: !settings.prayer_notifications })}
+            onClick={handleTogglePrayerNotifications}
           />
-          <div className="flex items-start gap-2 text-xs leading-relaxed rounded-2xl border border-amber-400/30 bg-amber-400/10 text-amber-700 dark:text-amber-200 p-3">
+          <div
+            className={`flex items-start gap-2 text-xs leading-relaxed rounded-2xl border p-3 ${
+              notificationInfo.tone === "success"
+                ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-700 dark:text-emerald-200"
+                : "border-amber-400/30 bg-amber-400/10 text-amber-700 dark:text-amber-200"
+            }`}
+          >
             <Info className="w-4 h-4 flex-shrink-0 mt-0.5" />
-            <span>Browser notifications still need a service worker later before they can work reliably when the app is closed.</span>
+            <div className="space-y-2">
+              <p className="font-extrabold">{notificationInfo.title}</p>
+              <p>{notificationInfo.body}</p>
+              {notificationStatus === "granted" &&
+                settings.prayer_notifications && (
+                  <button
+                    type="button"
+                    onClick={handleTestPrayerNotification}
+                    disabled={notificationTesting}
+                    className="px-3 py-2 rounded-xl bg-emerald-600 text-white font-extrabold active:scale-95 disabled:opacity-60"
+                  >
+                    {notificationTesting
+                      ? "Sending..."
+                      : "Send test notification"}
+                  </button>
+                )}
+            </div>
           </div>
         </section>
 
@@ -468,11 +751,21 @@ export default function SettingsScreen({ settings, onUpdateSettings, isLightMode
           <div className={`p-3 rounded-2xl border ${softPanel}`}>
             <div className="flex items-center gap-2 mb-2">
               <Smartphone className="w-4 h-4 text-emerald-500" />
-              <span className="text-xs font-extrabold uppercase tracking-wider text-emerald-500">Anonymous Device ID</span>
+              <span className="text-xs font-extrabold uppercase tracking-wider text-emerald-500">
+                Anonymous Device ID
+              </span>
             </div>
             <div className="flex items-center gap-2">
-              <code className={`min-w-0 flex-1 truncate text-[11px] px-3 py-2 rounded-xl border ${softPanel}`}>{deviceId}</code>
-              <button onClick={handleCopyDeviceId} className="p-2 rounded-xl bg-emerald-600 text-white active:scale-95" title="Copy device ID">
+              <code
+                className={`min-w-0 flex-1 truncate text-[11px] px-3 py-2 rounded-xl border ${softPanel}`}
+              >
+                {deviceId}
+              </code>
+              <button
+                onClick={handleCopyDeviceId}
+                className="p-2 rounded-xl bg-emerald-600 text-white active:scale-95"
+                title="Copy device ID"
+              >
                 <Copy className="w-4 h-4" />
               </button>
             </div>
@@ -506,13 +799,19 @@ export default function SettingsScreen({ settings, onUpdateSettings, isLightMode
             <Trash2 className="w-5 h-5 text-red-400" />
             <h3 className="font-extrabold text-base">Storage Management</h3>
           </div>
-          <div className={`grid grid-cols-2 gap-3 text-center text-xs ${mutedText}`}>
+          <div
+            className={`grid grid-cols-2 gap-3 text-center text-xs ${mutedText}`}
+          >
             <div className={`p-3 rounded-2xl border ${softPanel}`}>
-              <p className="text-lg font-extrabold text-emerald-500">{storageStats.downloads}</p>
+              <p className="text-lg font-extrabold text-emerald-500">
+                {storageStats.downloads}
+              </p>
               <p className="font-bold">Download flags</p>
             </div>
             <div className={`p-3 rounded-2xl border ${softPanel}`}>
-              <p className="text-lg font-extrabold text-emerald-500">{bytesToReadable(storageStats.bytes)}</p>
+              <p className="text-lg font-extrabold text-emerald-500">
+                {bytesToReadable(storageStats.bytes)}
+              </p>
               <p className="font-bold">Estimated usage</p>
             </div>
           </div>
@@ -526,27 +825,35 @@ export default function SettingsScreen({ settings, onUpdateSettings, isLightMode
             onClick={handleResetSettings}
             className={`w-full py-3 rounded-2xl font-extrabold text-xs flex items-center justify-center gap-2 border transition-all active:scale-95 ${softPanel}`}
           >
-            <RotateCcw className="w-4 h-4 text-amber-500" /> Restore Default Settings Only
+            <RotateCcw className="w-4 h-4 text-amber-500" /> Restore Default
+            Settings Only
           </button>
           <button
             onClick={handleFactoryReset}
             className={`w-full py-3 rounded-2xl font-extrabold text-xs flex items-center justify-center gap-2 border transition-all active:scale-95 ${
               confirmReset
-                ? 'bg-red-600 border-red-500 text-white'
-                : 'bg-red-500/10 border-red-500/30 text-red-500'
+                ? "bg-red-600 border-red-500 text-white"
+                : "bg-red-500/10 border-red-500/30 text-red-500"
             }`}
           >
-            <Trash2 className="w-4 h-4" /> {confirmReset ? 'Confirm Factory Reset' : 'Factory Reset Local App Data'}
+            <Trash2 className="w-4 h-4" />{" "}
+            {confirmReset
+              ? "Confirm Factory Reset"
+              : "Factory Reset Local App Data"}
           </button>
         </section>
 
         <section className="p-6 bg-emerald-950/40 border border-emerald-800/50 rounded-3xl space-y-4 shadow-xl">
           <div className="flex items-center gap-2.5 text-emerald-400">
             <ShieldCheck className="w-5 h-5 flex-shrink-0" />
-            <h3 className="font-extrabold text-sm uppercase tracking-wider">Private by Default</h3>
+            <h3 className="font-extrabold text-sm uppercase tracking-wider">
+              Private by Default
+            </h3>
           </div>
           <p className="text-xs text-emerald-100/90 leading-relaxed font-medium">
-            NoorQuran does not need an account for reading, adhkar, prayer times, qibla, bookmarks, or settings. Data stays local unless you configure cloud sync.
+            NoorQuran does not need an account for reading, adhkar, prayer
+            times, qibla, bookmarks, or settings. Data stays local unless you
+            configure cloud sync.
           </p>
         </section>
 
@@ -554,9 +861,13 @@ export default function SettingsScreen({ settings, onUpdateSettings, isLightMode
           <div className="inline-flex items-center gap-2 text-amber-500 px-4 py-2 bg-amber-500/10 border border-amber-500/30 rounded-full text-xs font-extrabold shadow">
             <Sparkles className="w-4 h-4" /> Sadaqah Jariyah Project
           </div>
-          <p className={`text-xs max-w-xs mx-auto leading-relaxed ${mutedText}`}>
-            Built to serve the Ummah with no ads, no paywalls, and no unnecessary tracking. Made with{' '}
-            <Heart className="w-3.5 h-3.5 inline text-red-500 fill-current" /> for beneficial use.
+          <p
+            className={`text-xs max-w-xs mx-auto leading-relaxed ${mutedText}`}
+          >
+            Built to serve the Ummah with no ads, no paywalls, and no
+            unnecessary tracking. Made with{" "}
+            <Heart className="w-3.5 h-3.5 inline text-red-500 fill-current" />{" "}
+            for beneficial use.
           </p>
         </section>
       </div>
@@ -579,12 +890,16 @@ function FontControl({
   isLightMode: boolean;
   onChange: (value: number) => void;
 }) {
-  const panelClasses = isLightMode ? 'bg-slate-50 border-slate-200' : 'bg-slate-900/70 border-slate-700';
+  const panelClasses = isLightMode
+    ? "bg-slate-50 border-slate-200"
+    : "bg-slate-900/70 border-slate-700";
 
   return (
     <div className={`p-3 rounded-2xl border ${panelClasses}`}>
       <div className="flex items-center justify-between gap-2 mb-2">
-        <span className="text-[11px] font-extrabold uppercase tracking-wider text-emerald-500">{label}</span>
+        <span className="text-[11px] font-extrabold uppercase tracking-wider text-emerald-500">
+          {label}
+        </span>
         <span className="text-xs font-extrabold">{value}px</span>
       </div>
       <div className="flex items-center gap-2">
@@ -613,27 +928,31 @@ function ToggleButton({
   isLightMode: boolean;
   onClick: () => void;
 }) {
-  const textColor = isLightMode ? 'text-slate-800' : 'text-white';
-  const mutedText = isLightMode ? 'text-slate-500' : 'text-slate-400';
+  const textColor = isLightMode ? "text-slate-800" : "text-white";
+  const mutedText = isLightMode ? "text-slate-500" : "text-slate-400";
 
   return (
     <button
       onClick={onClick}
       className={`w-full p-3 rounded-2xl border flex items-center justify-between gap-3 transition-all active:scale-95 ${
         enabled
-          ? 'bg-emerald-600 border-emerald-500 text-white'
+          ? "bg-emerald-600 border-emerald-500 text-white"
           : isLightMode
-            ? 'bg-slate-50 border-slate-200'
-            : 'bg-slate-900/70 border-slate-700'
+            ? "bg-slate-50 border-slate-200"
+            : "bg-slate-900/70 border-slate-700"
       }`}
     >
-      <span className={`text-xs font-extrabold text-left ${enabled ? 'text-white' : textColor}`}>{label}</span>
       <span
-        className={`w-12 h-7 rounded-full p-1 flex items-center transition-all ${enabled ? 'bg-white/20 justify-end' : 'bg-slate-700 justify-start'}`}
+        className={`text-xs font-extrabold text-left ${enabled ? "text-white" : textColor}`}
+      >
+        {label}
+      </span>
+      <span
+        className={`w-12 h-7 rounded-full p-1 flex items-center transition-all ${enabled ? "bg-white/20 justify-end" : "bg-slate-700 justify-start"}`}
       >
         <span className="w-5 h-5 bg-white rounded-full shadow" />
       </span>
-      <span className="sr-only">{enabled ? 'Enabled' : 'Disabled'}</span>
+      <span className="sr-only">{enabled ? "Enabled" : "Disabled"}</span>
       {!enabled && <span className={`hidden ${mutedText}`}>Off</span>}
     </button>
   );

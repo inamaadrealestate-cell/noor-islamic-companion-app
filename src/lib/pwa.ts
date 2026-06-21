@@ -3,98 +3,173 @@ type BeforeInstallPromptEvent = Event & {
   userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
 };
 
-const APP_INSTALL_DISMISSED_KEY = "noor_install_prompt_dismissed";
+export type NoorNotificationStatus =
+  | "unsupported"
+  | "default"
+  | "granted"
+  | "denied";
+
 const SERVICE_WORKER_PATH = "/sw.js";
+
+let serviceWorkerReloading = false;
+
+declare global {
+  interface Window {
+    noorDeferredInstallPrompt?: BeforeInstallPromptEvent;
+    noorPromptInstall?: () => Promise<void>;
+    noorApplyUpdate?: () => Promise<void>;
+  }
+}
 
 function isStandaloneMode(): boolean {
   const standaloneMedia = window.matchMedia("(display-mode: standalone)").matches;
-  const navigatorStandalone = Boolean((window.navigator as Navigator & { standalone?: boolean }).standalone);
+  const navigatorStandalone = Boolean(
+    (window.navigator as Navigator & { standalone?: boolean }).standalone,
+  );
   return standaloneMedia || navigatorStandalone;
 }
 
-function registerServiceWorker(): void {
-  if (!("serviceWorker" in navigator)) return;
-
-  window.addEventListener("load", () => {
-    navigator.serviceWorker
-      .register(SERVICE_WORKER_PATH)
-      .then((registration) => {
-        registration.update().catch(() => undefined);
-      })
-      .catch(() => undefined);
-  });
+function dispatchUpdateAvailable(): void {
+  window.dispatchEvent(new Event("noor-update-available"));
 }
 
-function createInstallBanner(event: BeforeInstallPromptEvent): void {
-  if (isStandaloneMode()) return;
-  if (localStorage.getItem(APP_INSTALL_DISMISSED_KEY) === "true") return;
-  if (document.getElementById("noor-install-banner")) return;
+export function getPrayerNotificationStatus(): NoorNotificationStatus {
+  if (!("Notification" in window)) return "unsupported";
+  return Notification.permission as NoorNotificationStatus;
+}
 
-  const banner = document.createElement("div");
-  banner.id = "noor-install-banner";
-  banner.setAttribute("role", "dialog");
-  banner.setAttribute("aria-live", "polite");
-  banner.style.cssText = [
-    "position:fixed",
-    "left:12px",
-    "right:12px",
-    "bottom:84px",
-    "z-index:9999",
-    "max-width:520px",
-    "margin:0 auto",
-    "padding:14px",
-    "border-radius:22px",
-    "border:1px solid rgba(16,185,129,.35)",
-    "background:linear-gradient(135deg, rgba(15,23,42,.98), rgba(6,78,59,.96))",
-    "box-shadow:0 24px 70px rgba(0,0,0,.4)",
-    "color:white",
-    "font-family:Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
-    "display:flex",
-    "gap:12px",
-    "align-items:center",
-  ].join(";");
+export async function registerNoorServiceWorker(): Promise<ServiceWorkerRegistration | null> {
+  if (!("serviceWorker" in navigator)) return null;
 
-  const text = document.createElement("div");
-  text.style.cssText = "flex:1;min-width:0";
-  text.innerHTML = `<div style="font-weight:900;font-size:14px;letter-spacing:.04em">Install NoorQuran</div><div style="font-size:12px;line-height:1.45;color:rgba(226,232,240,.9);margin-top:3px">Add it to your phone or desktop for a cleaner app experience.</div>`;
+  try {
+    const registration = await navigator.serviceWorker.register(SERVICE_WORKER_PATH);
 
-  const installButton = document.createElement("button");
-  installButton.type = "button";
-  installButton.textContent = "Install";
-  installButton.style.cssText = "border:0;border-radius:14px;background:#10b981;color:#fff;font-weight:900;padding:11px 14px;cursor:pointer";
+    if (registration.waiting && navigator.serviceWorker.controller) {
+      dispatchUpdateAvailable();
+    }
 
-  const closeButton = document.createElement("button");
-  closeButton.type = "button";
-  closeButton.textContent = "×";
-  closeButton.setAttribute("aria-label", "Dismiss install prompt");
-  closeButton.style.cssText = "border:1px solid rgba(255,255,255,.18);border-radius:14px;background:rgba(15,23,42,.72);color:#fff;font-size:20px;line-height:1;padding:8px 12px;cursor:pointer";
+    registration.addEventListener("updatefound", () => {
+      const installingWorker = registration.installing;
+      if (!installingWorker) return;
 
-  closeButton.addEventListener("click", () => {
-    localStorage.setItem(APP_INSTALL_DISMISSED_KEY, "true");
-    banner.remove();
+      installingWorker.addEventListener("statechange", () => {
+        if (installingWorker.state === "installed" && navigator.serviceWorker.controller) {
+          dispatchUpdateAvailable();
+        }
+      });
+    });
+
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      if (serviceWorkerReloading) return;
+      serviceWorkerReloading = true;
+      window.location.reload();
+    });
+
+    registration.update().catch(() => undefined);
+    return registration;
+  } catch {
+    return null;
+  }
+}
+
+export async function requestPrayerNotificationPermission(): Promise<{
+  status: NoorNotificationStatus;
+  serviceWorkerReady: boolean;
+  message: string;
+}> {
+  if (!("Notification" in window)) {
+    return {
+      status: "unsupported",
+      serviceWorkerReady: false,
+      message: "This browser does not support web notifications.",
+    };
+  }
+
+  const registration = await registerNoorServiceWorker();
+  const permission = await Notification.requestPermission();
+  const status = permission as NoorNotificationStatus;
+
+  if (status === "granted") {
+    return {
+      status,
+      serviceWorkerReady: Boolean(registration),
+      message: registration
+        ? "Prayer notifications enabled. NoorQuran can now show browser notifications on this device."
+        : "Notification permission granted, but the service worker is not ready yet. Refresh once and try again.",
+    };
+  }
+
+  if (status === "denied") {
+    return {
+      status,
+      serviceWorkerReady: Boolean(registration),
+      message:
+        "Notifications are blocked. Open this site's browser settings and allow notifications for NoorQuran.",
+    };
+  }
+
+  return {
+    status,
+    serviceWorkerReady: Boolean(registration),
+    message: "Notification permission was not granted yet.",
+  };
+}
+
+export async function showPrayerNotificationTest(): Promise<boolean> {
+  if (!("Notification" in window) || Notification.permission !== "granted") return false;
+
+  const registration = await registerNoorServiceWorker();
+  if (registration?.showNotification) {
+    await registration.showNotification("NoorQuran notifications are ready", {
+      body: "Prayer reminder notifications are enabled on this device.",
+      icon: "/icons/icon-192.png",
+      badge: "/icons/icon-192.png",
+      tag: "noorquran-notification-test",
+      data: { url: "/" },
+    });
+    return true;
+  }
+
+  new Notification("NoorQuran notifications are ready", {
+    body: "Prayer reminder notifications are enabled on this device.",
+    icon: "/icons/icon-192.png",
+    tag: "noorquran-notification-test",
   });
-
-  installButton.addEventListener("click", async () => {
-    banner.remove();
-    await event.prompt();
-    await event.userChoice.catch(() => undefined);
-  });
-
-  banner.append(text, installButton, closeButton);
-  document.body.appendChild(banner);
+  return true;
 }
 
 function setupInstallPrompt(): void {
+  if (isStandaloneMode()) return;
+
   window.addEventListener("beforeinstallprompt", (rawEvent) => {
     rawEvent.preventDefault();
-    createInstallBanner(rawEvent as BeforeInstallPromptEvent);
+    window.noorDeferredInstallPrompt = rawEvent as BeforeInstallPromptEvent;
   });
 
+  window.noorPromptInstall = async () => {
+    const event = window.noorDeferredInstallPrompt;
+    if (!event) return;
+
+    window.noorDeferredInstallPrompt = undefined;
+    await event.prompt();
+    await event.userChoice.catch(() => undefined);
+  };
+
   window.addEventListener("appinstalled", () => {
-    localStorage.setItem(APP_INSTALL_DISMISSED_KEY, "true");
-    document.getElementById("noor-install-banner")?.remove();
+    window.noorDeferredInstallPrompt = undefined;
   });
 }
 
-registerServiceWorker();
+window.noorApplyUpdate = async () => {
+  const registration = await navigator.serviceWorker?.getRegistration(SERVICE_WORKER_PATH);
+  if (registration?.waiting) {
+    registration.waiting.postMessage({ type: "SKIP_WAITING" });
+    return;
+  }
+  window.location.reload();
+};
+
+window.addEventListener("load", () => {
+  registerNoorServiceWorker().catch(() => undefined);
+});
 setupInstallPrompt();
