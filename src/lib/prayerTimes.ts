@@ -52,6 +52,15 @@ export interface CitySearchResult {
   displayName: string;
 }
 
+export interface MonthlyPrayerDay {
+  dayNumber: number;
+  gregorianDate: string;
+  gregorianWeekday: string;
+  hijriDate: string;
+  hijriWeekdayAr: string;
+  timings: PrayerTimesData['timings'];
+}
+
 export const DEFAULT_PRAYER_LOCATION: PrayerLocation = {
   lat: 21.4225,
   lng: 39.8262,
@@ -62,7 +71,6 @@ export const DEFAULT_PRAYER_LOCATION: PrayerLocation = {
 export const ADHAN_AUDIO_URL = 'https://www.islamcan.com/audio/adhan/azan1.mp3';
 export const PRAYER_LOCATION_STORAGE_KEY = 'noor_prayer_location';
 
-// Fallback static timing if API fails or the user is offline.
 export const FALLBACK_PRAYER_DATA: PrayerTimesData = {
   timings: {
     Fajr: '05:12',
@@ -101,16 +109,19 @@ function cleanTimingValue(value: string | undefined): string {
   return match ? match[0].padStart(5, '0') : value;
 }
 
-function cleanPrayerTimesData(data: PrayerTimesData): PrayerTimesData {
-  const cleanedTimings = { ...data.timings };
+function cleanPrayerTimings(timings: Record<string, string>): PrayerTimesData['timings'] {
+  const cleanedTimings = { ...timings } as PrayerTimesData['timings'];
   Object.keys(cleanedTimings).forEach((key) => {
     cleanedTimings[key] = cleanTimingValue(cleanedTimings[key]);
   });
   cleanedTimings.Jumuah = cleanedTimings.Dhuhr;
+  return cleanedTimings;
+}
 
+function cleanPrayerTimesData(data: PrayerTimesData): PrayerTimesData {
   return {
     ...data,
-    timings: cleanedTimings,
+    timings: cleanPrayerTimings(data.timings),
   };
 }
 
@@ -241,6 +252,40 @@ export async function fetchPrayerTimes(
     return cleanPrayerTimesData(FALLBACK_PRAYER_DATA);
   } catch {
     return cleanPrayerTimesData(FALLBACK_PRAYER_DATA);
+  }
+}
+
+export async function fetchMonthlyPrayerTimes(
+  lat: number,
+  lng: number,
+  method: number = 4,
+  month: number = new Date().getMonth() + 1,
+  year: number = new Date().getFullYear()
+): Promise<MonthlyPrayerDay[]> {
+  try {
+    const params = new URLSearchParams({
+      latitude: String(lat),
+      longitude: String(lng),
+      method: String(method),
+    });
+    const url = `https://api.aladhan.com/v1/calendar/${year}/${month}?${params.toString()}`;
+    const res = await fetch(url);
+
+    if (!res.ok) throw new Error('Monthly prayer timetable failed.');
+
+    const json = await res.json();
+    const days = Array.isArray(json.data) ? json.data : [];
+
+    return days.map((item: any, index: number) => ({
+      dayNumber: Number(item?.date?.gregorian?.day || index + 1),
+      gregorianDate: item?.date?.gregorian?.date || `${String(index + 1).padStart(2, '0')}-${String(month).padStart(2, '0')}-${year}`,
+      gregorianWeekday: item?.date?.gregorian?.weekday?.en || '',
+      hijriDate: item?.date?.hijri?.date || '',
+      hijriWeekdayAr: item?.date?.hijri?.weekday?.ar || '',
+      timings: cleanPrayerTimings(item?.timings || {}),
+    }));
+  } catch {
+    return [];
   }
 }
 

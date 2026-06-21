@@ -1,12 +1,14 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { AlertCircle, Globe, MapPin, Navigation, Search, Volume2 } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { AlertCircle, ChevronLeft, ChevronRight, Copy, Globe, MapPin, Navigation, Search, Volume2 } from 'lucide-react';
 import {
   ADHAN_AUDIO_URL,
   DEFAULT_PRAYER_LOCATION,
+  MonthlyPrayerDay,
   PrayerLocation,
   PrayerTimesData,
   NextPrayerInfo,
   calculateNextPrayer,
+  fetchMonthlyPrayerTimes,
   fetchPrayerTimes,
   getBrowserPrayerLocation,
   readSavedPrayerLocation,
@@ -37,7 +39,29 @@ const PRAYER_ROWS = [
   { name: 'Asr', key: 'Asr', icon: '🌤️', note: 'Afternoon prayer' },
   { name: 'Maghrib', key: 'Maghrib', icon: '🌇', note: 'Sunset prayer' },
   { name: 'Isha', key: 'Isha', icon: '🌙', note: 'Night prayer' },
+] as const;
+
+const QUICK_LOCATIONS: PrayerLocation[] = [
+  { lat: 9.0765, lng: 7.3986, label: 'Abuja, Nigeria', source: 'search' },
+  { lat: 6.5244, lng: 3.3792, label: 'Lagos, Nigeria', source: 'search' },
+  { lat: 11.9964, lng: 8.5167, label: 'Kano, Nigeria', source: 'search' },
+  { lat: 10.5105, lng: 7.4165, label: 'Kaduna, Nigeria', source: 'search' },
+  { lat: 11.8311, lng: 13.1510, label: 'Maiduguri, Nigeria', source: 'search' },
+  { lat: 21.4225, lng: 39.8262, label: 'Makkah, Saudi Arabia', source: 'search' },
 ];
+
+function getMonthTitle(date: Date): string {
+  return date.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+}
+
+function isToday(day: MonthlyPrayerDay, monthCursor: Date): boolean {
+  const now = new Date();
+  return (
+    now.getFullYear() === monthCursor.getFullYear() &&
+    now.getMonth() === monthCursor.getMonth() &&
+    now.getDate() === day.dayNumber
+  );
+}
 
 export default function PrayerScreen({ isLightMode, settings, onUpdateSettings }: PrayerScreenProps) {
   const [location, setLocation] = useState<PrayerLocation>(() => readSavedPrayerLocation() || DEFAULT_PRAYER_LOCATION);
@@ -52,6 +76,11 @@ export default function PrayerScreen({ isLightMode, settings, onUpdateSettings }
   const [error, setError] = useState<string>('');
   const [isAdhanPlaying, setIsAdhanPlaying] = useState<boolean>(false);
   const [adhanError, setAdhanError] = useState<string>('');
+  const [viewMode, setViewMode] = useState<'today' | 'month'>('today');
+  const [monthCursor, setMonthCursor] = useState<Date>(() => new Date());
+  const [monthlyDays, setMonthlyDays] = useState<MonthlyPrayerDay[]>([]);
+  const [loadingMonth, setLoadingMonth] = useState<boolean>(false);
+  const [monthCopied, setMonthCopied] = useState<boolean>(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const textMain = isLightMode ? 'text-slate-900' : 'text-white';
@@ -60,6 +89,8 @@ export default function PrayerScreen({ isLightMode, settings, onUpdateSettings }
   const inputClass = isLightMode
     ? 'bg-slate-50 border-slate-200 text-slate-900 placeholder:text-slate-400'
     : 'bg-slate-900 border-slate-700 text-white placeholder:text-slate-500';
+
+  const monthTitle = useMemo(() => getMonthTitle(monthCursor), [monthCursor]);
 
   const loadTimings = useCallback(
     async (targetLocation: PrayerLocation) => {
@@ -83,9 +114,35 @@ export default function PrayerScreen({ isLightMode, settings, onUpdateSettings }
     [settings.calculation_method]
   );
 
+  const loadMonth = useCallback(async () => {
+    setLoadingMonth(true);
+    setError('');
+
+    const days = await fetchMonthlyPrayerTimes(
+      location.lat,
+      location.lng,
+      settings.calculation_method || 4,
+      monthCursor.getMonth() + 1,
+      monthCursor.getFullYear()
+    );
+
+    if (days.length === 0) {
+      setError('Monthly timetable could not load right now. Try again when online.');
+    }
+
+    setMonthlyDays(days);
+    setLoadingMonth(false);
+  }, [location.lat, location.lng, monthCursor, settings.calculation_method]);
+
   useEffect(() => {
     loadTimings(location);
   }, [location, loadTimings]);
+
+  useEffect(() => {
+    if (viewMode === 'month') {
+      loadMonth();
+    }
+  }, [viewMode, loadMonth]);
 
   useEffect(() => {
     const interval = window.setInterval(() => {
@@ -190,6 +247,27 @@ export default function PrayerScreen({ isLightMode, settings, onUpdateSettings }
     }
   };
 
+  const shiftMonth = (amount: number) => {
+    setMonthCursor((current) => new Date(current.getFullYear(), current.getMonth() + amount, 1));
+  };
+
+  const copyMonthlyTimetable = async () => {
+    if (monthlyDays.length === 0) return;
+
+    const header = `NoorQuran Prayer Timetable - ${location.label} - ${monthTitle}`;
+    const lines = monthlyDays.map((day) => {
+      return `${day.gregorianDate} (${day.hijriWeekdayAr || day.gregorianWeekday}) | Fajr ${day.timings.Fajr} | Sunrise ${day.timings.Sunrise} | Dhuhr ${day.timings.Dhuhr} | Asr ${day.timings.Asr} | Maghrib ${day.timings.Maghrib} | Isha ${day.timings.Isha}`;
+    });
+
+    try {
+      await navigator.clipboard.writeText([header, ...lines].join('\n'));
+      setMonthCopied(true);
+      window.setTimeout(() => setMonthCopied(false), 2000);
+    } catch {
+      setError('Could not copy timetable on this browser.');
+    }
+  };
+
   return (
     <div className="max-w-lg mx-auto pb-32">
       <div className={`sticky top-0 z-30 border-b backdrop-blur-md px-4 py-3 flex items-center justify-between ${
@@ -197,7 +275,7 @@ export default function PrayerScreen({ isLightMode, settings, onUpdateSettings }
       }`}>
         <div>
           <h1 className="text-xl font-extrabold text-emerald-500 tracking-tight">Salah Timings</h1>
-          <p className={`text-[11px] font-semibold mt-0.5 ${textMuted}`}>Accurate times by location</p>
+          <p className={`text-[11px] font-semibold mt-0.5 ${textMuted}`}>Daily and monthly prayer timetable</p>
         </div>
         <button
           onClick={toggleAdhan}
@@ -224,6 +302,21 @@ export default function PrayerScreen({ isLightMode, settings, onUpdateSettings }
           </div>
         )}
 
+        <div className={`p-1 rounded-2xl border grid grid-cols-2 gap-1 ${isLightMode ? 'bg-white border-slate-200' : 'bg-slate-800/70 border-slate-700'}`}>
+          <button
+            onClick={() => setViewMode('today')}
+            className={`py-3 rounded-xl text-xs font-extrabold transition-all active:scale-95 ${viewMode === 'today' ? 'bg-emerald-600 text-white shadow' : textMuted}`}
+          >
+            Today
+          </button>
+          <button
+            onClick={() => setViewMode('month')}
+            className={`py-3 rounded-xl text-xs font-extrabold transition-all active:scale-95 ${viewMode === 'month' ? 'bg-emerald-600 text-white shadow' : textMuted}`}
+          >
+            Monthly Timetable
+          </button>
+        </div>
+
         <div className={`p-5 rounded-3xl border space-y-4 ${panelClass}`}>
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-start gap-3 min-w-0">
@@ -237,7 +330,7 @@ export default function PrayerScreen({ isLightMode, settings, onUpdateSettings }
                 </p>
               </div>
             </div>
-            {loadingTimes && <span className="text-[11px] font-bold text-emerald-500 animate-pulse">Loading...</span>}
+            {(loadingTimes || loadingMonth) && <span className="text-[11px] font-bold text-emerald-500 animate-pulse">Loading...</span>}
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -258,6 +351,24 @@ export default function PrayerScreen({ isLightMode, settings, onUpdateSettings }
               <Search className="w-4 h-4" />
               Search City
             </button>
+          </div>
+
+          <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
+            {QUICK_LOCATIONS.map((preset) => (
+              <button
+                key={preset.label}
+                onClick={() => applyLocation(preset)}
+                className={`px-3 py-2 rounded-full border text-[11px] font-extrabold whitespace-nowrap transition-all active:scale-95 ${
+                  location.label === preset.label
+                    ? 'bg-emerald-600 border-emerald-500 text-white'
+                    : isLightMode
+                      ? 'bg-slate-50 border-slate-200 text-slate-600 hover:border-emerald-400'
+                      : 'bg-slate-900 border-slate-700 text-slate-300 hover:border-emerald-500'
+                }`}
+              >
+                {preset.label.split(',')[0]}
+              </button>
+            ))}
           </div>
 
           {searchOpen && (
@@ -303,66 +414,144 @@ export default function PrayerScreen({ isLightMode, settings, onUpdateSettings }
           )}
         </div>
 
-        {nextPrayer && (
-          <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-emerald-800 to-slate-950 p-6 text-white shadow-xl shadow-emerald-950/30 border border-emerald-600/30">
-            <div className="absolute top-0 right-0 p-8 opacity-10 pointer-events-none">
-              <span className="text-8xl font-serif">🕌</span>
+        {viewMode === 'today' && (
+          <>
+            {nextPrayer && (
+              <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-emerald-800 to-slate-950 p-6 text-white shadow-xl shadow-emerald-950/30 border border-emerald-600/30">
+                <div className="absolute top-0 right-0 p-8 opacity-10 pointer-events-none">
+                  <span className="text-8xl font-serif">🕌</span>
+                </div>
+                <div className="relative z-10 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs uppercase tracking-widest font-extrabold text-emerald-300">Next Prayer</span>
+                    <span className="text-xs px-2.5 py-1 bg-emerald-950/70 rounded-full text-emerald-200 font-bold border border-emerald-700/40">
+                      {nextPrayer.time}
+                    </span>
+                  </div>
+                  <div>
+                    <h2 className="text-4xl font-black tracking-tight">{nextPrayer.name}</h2>
+                    <p className="text-sm font-medium text-emerald-200/90 mt-1">{nextPrayer.remainingText}</p>
+                  </div>
+                  <p className="text-xs text-slate-300 border-t border-emerald-700/50 pt-3">
+                    {prayerData?.date.hijri.date || 'Hijri date loading'} • {prayerData?.date.hijri.weekday.ar || 'اليوم'} • {prayerData?.date.gregorian.date || 'Gregorian date loading'}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            <div className="space-y-3">
+              {PRAYER_ROWS.map((item) => {
+                const time = prayerData ? prayerData.timings[item.key] : '--:--';
+                const isNext = nextPrayer?.name === item.key;
+
+                return (
+                  <div
+                    key={item.key}
+                    className={`p-5 rounded-3xl border flex items-center justify-between transition-all ${
+                      isNext
+                        ? 'bg-emerald-950/60 border-emerald-500 shadow-xl shadow-emerald-950/40'
+                        : panelClass
+                    }`}
+                  >
+                    <div className="flex items-center gap-4">
+                      <span className="text-2xl">{item.icon}</span>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h3 className={`font-bold text-base tracking-tight ${isNext ? 'text-emerald-400' : textMain}`}>
+                            {item.name}
+                          </h3>
+                          {isNext && <span className="text-[10px] px-2 py-0.5 bg-emerald-500 text-slate-950 font-extrabold rounded-full uppercase tracking-wider">Next</span>}
+                        </div>
+                        <p className={`text-xs mt-0.5 ${textMuted}`}>{item.note}</p>
+                      </div>
+                    </div>
+
+                    <div className="text-right">
+                      <span className={`text-2xl font-extrabold font-sans tracking-tight ${isNext ? 'text-emerald-400' : textMain}`}>
+                        {time}
+                      </span>
+                      {isNext && <p className="text-xs font-bold text-emerald-500 mt-0.5">{nextPrayer?.remainingText}</p>}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
-            <div className="relative z-10 space-y-4">
-              <div className="flex items-center justify-between">
-                <span className="text-xs uppercase tracking-widest font-extrabold text-emerald-300">Next Prayer</span>
-                <span className="text-xs px-2.5 py-1 bg-emerald-950/70 rounded-full text-emerald-200 font-bold border border-emerald-700/40">
-                  {nextPrayer.time}
-                </span>
+          </>
+        )}
+
+        {viewMode === 'month' && (
+          <div className={`rounded-3xl border overflow-hidden ${panelClass}`}>
+            <div className={`p-4 border-b flex items-center justify-between gap-3 ${isLightMode ? 'border-slate-200' : 'border-slate-700'}`}>
+              <button
+                onClick={() => shiftMonth(-1)}
+                className={`w-10 h-10 rounded-2xl border flex items-center justify-center transition-all active:scale-95 ${isLightMode ? 'bg-slate-50 border-slate-200 text-slate-700' : 'bg-slate-900 border-slate-700 text-slate-200'}`}
+              >
+                <ChevronLeft className="w-5 h-5" />
+              </button>
+              <div className="text-center">
+                <h2 className={`text-sm font-black ${textMain}`}>{monthTitle}</h2>
+                <p className={`text-[11px] font-semibold mt-0.5 ${textMuted}`}>{location.label}</p>
               </div>
-              <div>
-                <h2 className="text-4xl font-black tracking-tight">{nextPrayer.name}</h2>
-                <p className="text-sm font-medium text-emerald-200/90 mt-1">{nextPrayer.remainingText}</p>
+              <button
+                onClick={() => shiftMonth(1)}
+                className={`w-10 h-10 rounded-2xl border flex items-center justify-center transition-all active:scale-95 ${isLightMode ? 'bg-slate-50 border-slate-200 text-slate-700' : 'bg-slate-900 border-slate-700 text-slate-200'}`}
+              >
+                <ChevronRight className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-4 space-y-4">
+              <button
+                onClick={copyMonthlyTimetable}
+                disabled={monthlyDays.length === 0}
+                className="w-full py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-extrabold flex items-center justify-center gap-2 transition-all active:scale-95"
+              >
+                <Copy className="w-4 h-4" />
+                {monthCopied ? 'Copied Timetable' : 'Copy Monthly Timetable'}
+              </button>
+
+              <div className="overflow-x-auto no-scrollbar">
+                <div className="min-w-[620px] space-y-2">
+                  <div className={`grid grid-cols-[70px_repeat(6,1fr)] gap-2 px-3 text-[10px] font-black uppercase tracking-wider ${textMuted}`}>
+                    <span>Date</span>
+                    <span>Fajr</span>
+                    <span>Sunrise</span>
+                    <span>Dhuhr</span>
+                    <span>Asr</span>
+                    <span>Maghrib</span>
+                    <span>Isha</span>
+                  </div>
+
+                  {loadingMonth && <p className={`p-4 text-xs font-bold ${textMuted}`}>Loading monthly timetable...</p>}
+
+                  {!loadingMonth && monthlyDays.map((day) => (
+                    <div
+                      key={day.gregorianDate}
+                      className={`grid grid-cols-[70px_repeat(6,1fr)] gap-2 items-center px-3 py-3 rounded-2xl border text-xs font-bold ${
+                        isToday(day, monthCursor)
+                          ? 'bg-emerald-600 border-emerald-500 text-white shadow-lg shadow-emerald-950/30'
+                          : isLightMode
+                            ? 'bg-slate-50 border-slate-200 text-slate-700'
+                            : 'bg-slate-900/70 border-slate-700 text-slate-200'
+                      }`}
+                    >
+                      <div>
+                        <p className="font-black">{day.dayNumber}</p>
+                        <p className="text-[10px] opacity-80">{day.hijriWeekdayAr || day.gregorianWeekday.slice(0, 3)}</p>
+                      </div>
+                      <span>{day.timings.Fajr}</span>
+                      <span>{day.timings.Sunrise}</span>
+                      <span>{day.timings.Dhuhr}</span>
+                      <span>{day.timings.Asr}</span>
+                      <span>{day.timings.Maghrib}</span>
+                      <span>{day.timings.Isha}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
-              <p className="text-xs text-slate-300 border-t border-emerald-700/50 pt-3">
-                {prayerData?.date.hijri.date || 'Hijri date loading'} • {prayerData?.date.gregorian.date || 'Gregorian date loading'}
-              </p>
             </div>
           </div>
         )}
-
-        <div className="space-y-3">
-          {PRAYER_ROWS.map((item) => {
-            const time = prayerData ? prayerData.timings[item.key] : '--:--';
-            const isNext = nextPrayer?.name === item.key;
-
-            return (
-              <div
-                key={item.key}
-                className={`p-5 rounded-3xl border flex items-center justify-between transition-all ${
-                  isNext
-                    ? 'bg-emerald-950/60 border-emerald-500 shadow-xl shadow-emerald-950/40'
-                    : panelClass
-                }`}
-              >
-                <div className="flex items-center gap-4">
-                  <span className="text-2xl">{item.icon}</span>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h3 className={`font-bold text-base tracking-tight ${isNext ? 'text-emerald-400' : textMain}`}>
-                        {item.name}
-                      </h3>
-                      {isNext && <span className="text-[10px] px-2 py-0.5 bg-emerald-500 text-slate-950 font-extrabold rounded-full uppercase tracking-wider">Next</span>}
-                    </div>
-                    <p className={`text-xs mt-0.5 ${textMuted}`}>{item.note}</p>
-                  </div>
-                </div>
-
-                <div className="text-right">
-                  <span className={`text-2xl font-extrabold font-sans tracking-tight ${isNext ? 'text-emerald-400' : textMain}`}>
-                    {time}
-                  </span>
-                  {isNext && <p className="text-xs font-bold text-emerald-500 mt-0.5">{nextPrayer?.remainingText}</p>}
-                </div>
-              </div>
-            );
-          })}
-        </div>
 
         <div className={`p-6 rounded-3xl border space-y-4 ${panelClass}`}>
           <div className="flex items-center gap-2 text-emerald-500 font-extrabold text-xs tracking-wider uppercase">
@@ -370,7 +559,7 @@ export default function PrayerScreen({ isLightMode, settings, onUpdateSettings }
             <span>Calculation Method</span>
           </div>
           <p className={`text-xs leading-relaxed ${textMuted}`}>
-            Choose the Islamic authority used for Fajr and Isha angles. Changing this immediately reloads the timings for your saved location.
+            Choose the Islamic authority used for Fajr and Isha angles. Changing this immediately reloads today and the monthly timetable.
           </p>
           <select
             value={settings.calculation_method}
@@ -387,7 +576,7 @@ export default function PrayerScreen({ isLightMode, settings, onUpdateSettings }
           isLightMode ? 'bg-emerald-50 border-emerald-100 text-emerald-900' : 'bg-emerald-950/30 border-emerald-800/60 text-emerald-100'
         }`}>
           <p className="text-xs font-semibold leading-relaxed">
-            Tip: use “Use My Location” for best accuracy. If permission is denied, search your city and the app will remember it for next time.
+            Tip: use the monthly timetable to plan Ramadan, school, work, or mosque activities. Times may vary slightly by local masjid, so follow your local authority when needed.
           </p>
         </div>
       </div>
