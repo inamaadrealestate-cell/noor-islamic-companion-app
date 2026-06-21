@@ -1,5 +1,17 @@
-import { useState, useEffect } from 'react';
-import { BookOpen, Heart, Compass, Clock, Play, ArrowRight, Sparkles } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import {
+  ArrowRight,
+  BookOpen,
+  Clock,
+  Compass,
+  Heart,
+  Music,
+  Play,
+  Repeat,
+  Search,
+  Sparkles,
+  X,
+} from 'lucide-react';
 import {
   DEFAULT_PRAYER_LOCATION,
   fetchPrayerTimes,
@@ -18,6 +30,15 @@ interface HomeScreenProps {
   onContinueReading: (surah: number, ayah: number) => void;
   isLightMode: boolean;
 }
+
+type SearchResult = {
+  id: string;
+  type: 'Quran' | 'Dua' | 'Adhkar' | 'Reciter' | 'Tool';
+  title: string;
+  subtitle: string;
+  actionLabel: string;
+  action: () => void;
+};
 
 const VERSES_OF_DAY = [
   {
@@ -92,9 +113,27 @@ const VERSES_OF_DAY = [
   },
 ];
 
+const TASBIH_PRESETS = [
+  'SubhanAllah',
+  'Alhamdulillah',
+  'Allahu Akbar',
+  'Astaghfirullah',
+  'La ilaha illa Allah',
+  'Salawat',
+  'La hawla wa la quwwata illa billah',
+];
+
 const TOTAL_ADHKAR_ITEMS = ADHKAR_CATEGORIES.reduce((sum, category) => sum + category.items.length, 0);
 const TOTAL_DUAS = DUAS_LIST.length;
 const TOTAL_RECITERS = RECITERS_LIST.length;
+
+function normalize(value: string): string {
+  return value.toLowerCase().trim();
+}
+
+function contains(value: string | undefined, query: string): boolean {
+  return normalize(value || '').includes(query);
+}
 
 export default function HomeScreen({ setActiveTab, onContinueReading, isLightMode }: HomeScreenProps) {
   const [prayerData, setPrayerData] = useState<PrayerTimesData | null>(null);
@@ -103,6 +142,7 @@ export default function HomeScreen({ setActiveTab, onContinueReading, isLightMod
   const [verseOfDay, setVerseOfDay] = useState(VERSES_OF_DAY[0]);
   const [adhkarCompletedCount, setAdhkarCompletedCount] = useState(0);
   const [prayerLocationLabel, setPrayerLocationLabel] = useState<string>(DEFAULT_PRAYER_LOCATION.label);
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     const startOfYear = new Date(new Date().getFullYear(), 0, 0).getTime();
@@ -138,11 +178,134 @@ export default function HomeScreen({ setActiveTab, onContinueReading, isLightMod
     ? `${prayerData.date.hijri.date} • ${prayerData.date.gregorian.weekday.en}, ${prayerData.date.gregorian.date}`
     : 'Preparing today’s Islamic dashboard...';
 
+  const searchResults = useMemo<SearchResult[]>(() => {
+    const query = normalize(searchQuery);
+    if (query.length < 2) return [];
+
+    const results: SearchResult[] = [];
+
+    SURAH_LIST.forEach((surah) => {
+      if (
+        contains(surah.englishName, query) ||
+        contains(surah.englishNameTranslation, query) ||
+        contains(surah.name, query) ||
+        String(surah.number) === query
+      ) {
+        results.push({
+          id: `surah-${surah.number}`,
+          type: 'Quran',
+          title: `${surah.number}. ${surah.englishName}`,
+          subtitle: `${surah.englishNameTranslation} • ${surah.numberOfAyahs} ayahs`,
+          actionLabel: 'Read',
+          action: () => onContinueReading(surah.number, 1),
+        });
+      }
+    });
+
+    ADHKAR_CATEGORIES.forEach((category) => {
+      if (contains(category.name, query) || contains(category.arabic_name, query) || contains(category.description, query)) {
+        results.push({
+          id: `adhkar-category-${category.id}`,
+          type: 'Adhkar',
+          title: category.name,
+          subtitle: `${category.items.length} items • ${category.description}`,
+          actionLabel: 'Open',
+          action: () => setActiveTab('adhkar'),
+        });
+      }
+
+      category.items.slice(0, 6).forEach((item) => {
+        if (
+          contains(item.translation, query) ||
+          contains(item.transliteration, query) ||
+          contains(item.source, query) ||
+          contains(item.arabic, query)
+        ) {
+          results.push({
+            id: `adhkar-${item.id}`,
+            type: 'Adhkar',
+            title: category.name,
+            subtitle: item.translation.length > 92 ? `${item.translation.slice(0, 92)}...` : item.translation,
+            actionLabel: 'Open',
+            action: () => setActiveTab('adhkar'),
+          });
+        }
+      });
+    });
+
+    DUAS_LIST.forEach((dua) => {
+      if (
+        contains(dua.title, query) ||
+        contains(dua.category, query) ||
+        contains(dua.translation, query) ||
+        contains(dua.transliteration, query) ||
+        contains(dua.arabic, query)
+      ) {
+        results.push({
+          id: `dua-${dua.id}`,
+          type: 'Dua',
+          title: dua.title,
+          subtitle: `${dua.category} • ${dua.translation.length > 82 ? `${dua.translation.slice(0, 82)}...` : dua.translation}`,
+          actionLabel: 'Open',
+          action: () => setActiveTab('adhkar'),
+        });
+      }
+    });
+
+    RECITERS_LIST.forEach((reciter) => {
+      if (contains(reciter.name, query) || contains(reciter.arabicName, query) || contains(reciter.style, query)) {
+        results.push({
+          id: `reciter-${reciter.id}`,
+          type: 'Reciter',
+          title: reciter.name,
+          subtitle: `${reciter.arabicName} • ${reciter.style}`,
+          actionLabel: 'Audio',
+          action: () => setActiveTab('quran'),
+        });
+      }
+    });
+
+    TASBIH_PRESETS.forEach((preset) => {
+      if (contains(preset, query)) {
+        results.push({
+          id: `tasbih-${preset}`,
+          type: 'Tool',
+          title: preset,
+          subtitle: 'Open the Tasbih counter and start counting this dhikr.',
+          actionLabel: 'Count',
+          action: () => setActiveTab('tasbih'),
+        });
+      }
+    });
+
+    if (contains('salah prayer qibla compass settings tasbih quran adhkar duas reciters audio', query)) {
+      [
+        { id: 'tool-prayer', type: 'Tool' as const, title: 'Salah timings', subtitle: 'Open prayer times and adhan controls.', tab: 'prayer', actionLabel: 'Salah' },
+        { id: 'tool-qibla', type: 'Tool' as const, title: 'Qibla compass', subtitle: 'Find direction to the Kaaba.', tab: 'qibla', actionLabel: 'Qibla' },
+        { id: 'tool-tasbih', type: 'Tool' as const, title: 'Tasbih counter', subtitle: 'Open saved dhikr counter and session history.', tab: 'tasbih', actionLabel: 'Count' },
+      ].forEach((tool) => {
+        if (contains(`${tool.title} ${tool.subtitle}`, query)) {
+          results.push({
+            id: tool.id,
+            type: tool.type,
+            title: tool.title,
+            subtitle: tool.subtitle,
+            actionLabel: tool.actionLabel,
+            action: () => setActiveTab(tool.tab),
+          });
+        }
+      });
+    }
+
+    return results.slice(0, 14);
+  }, [onContinueReading, searchQuery, setActiveTab]);
+
   const quickAccessItems = [
     { id: 'quran', label: 'Quran', icon: BookOpen, color: 'bg-emerald-600' },
-    { id: 'adhkar', label: 'Adhkar', icon: Heart, color: 'bg-amber-500' },
-    { id: 'qibla', label: 'Qibla', icon: Compass, color: 'bg-blue-600' },
     { id: 'prayer', label: 'Salah', icon: Clock, color: 'bg-purple-600' },
+    { id: 'adhkar', label: 'Adhkar', icon: Heart, color: 'bg-amber-500' },
+    { id: 'tasbih', label: 'Tasbih', icon: Repeat, color: 'bg-teal-600' },
+    { id: 'qibla', label: 'Qibla', icon: Compass, color: 'bg-blue-600' },
   ];
 
   const libraryStats = [
@@ -151,6 +314,11 @@ export default function HomeScreen({ setActiveTab, onContinueReading, isLightMod
     { label: 'Duas', value: TOTAL_DUAS, tab: 'adhkar' },
     { label: 'Reciters', value: TOTAL_RECITERS, tab: 'quran' },
   ];
+
+  const cardBg = isLightMode ? 'bg-white border-slate-200 shadow-sm' : 'bg-slate-800/60 border-slate-700/80 shadow-md';
+  const mutedText = isLightMode ? 'text-slate-600' : 'text-slate-400';
+  const strongText = isLightMode ? 'text-slate-900' : 'text-white';
+  const inputBg = isLightMode ? 'bg-white border-slate-200 text-slate-900' : 'bg-slate-800 border-slate-700 text-white';
 
   return (
     <div className="max-w-lg mx-auto px-5 pt-8 pb-32 space-y-6">
@@ -184,6 +352,89 @@ export default function HomeScreen({ setActiveTab, onContinueReading, isLightMod
           </div>
         </div>
       </div>
+
+      <section className={`rounded-3xl border p-4 ${cardBg}`}>
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <div>
+            <h2 className={`text-base font-black ${strongText}`}>Smart Search</h2>
+            <p className={`text-xs ${mutedText}`}>Search Surahs, duas, adhkar, reciters, and tools.</p>
+          </div>
+          <Search className="h-5 w-5 text-emerald-500" />
+        </div>
+
+        <div className={`flex items-center gap-3 rounded-2xl border px-4 py-3 ${inputBg}`}>
+          <Search className="h-5 w-5 text-emerald-500" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            placeholder="Try Al-Kahf, travel, Ali Jaber, rizq, tasbih..."
+            className="w-full bg-transparent text-sm font-semibold outline-none placeholder:text-slate-400"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className="rounded-full p-1 text-slate-400 hover:bg-slate-700/20 hover:text-emerald-500"
+              aria-label="Clear search"
+              type="button"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+
+        <div className="mt-3 flex flex-wrap gap-2">
+          {['Al-Kahf', 'travel', 'parents', 'Ali Jaber', 'tasbih'].map((suggestion) => (
+            <button
+              key={suggestion}
+              onClick={() => setSearchQuery(suggestion)}
+              className={`rounded-xl border px-3 py-1.5 text-[11px] font-bold transition-all active:scale-95 ${
+                isLightMode ? 'border-slate-200 bg-slate-50 text-slate-600 hover:border-emerald-300' : 'border-slate-700 bg-slate-900/60 text-slate-300 hover:border-emerald-600'
+              }`}
+              type="button"
+            >
+              {suggestion}
+            </button>
+          ))}
+        </div>
+
+        {searchQuery.trim().length >= 2 && (
+          <div className="mt-4 space-y-2">
+            {searchResults.length === 0 ? (
+              <div className={`rounded-2xl border p-4 text-center ${isLightMode ? 'border-slate-200 bg-slate-50' : 'border-slate-700 bg-slate-900/60'}`}>
+                <p className={`text-sm font-black ${strongText}`}>No result found</p>
+                <p className={`mt-1 text-xs ${mutedText}`}>Try a Surah name, dua topic, reciter name, or tool name.</p>
+              </div>
+            ) : (
+              searchResults.map((result) => (
+                <button
+                  key={result.id}
+                  onClick={result.action}
+                  className={`w-full rounded-2xl border p-3 text-left transition-all active:scale-[0.99] ${
+                    isLightMode ? 'border-slate-200 bg-slate-50 hover:border-emerald-300' : 'border-slate-700 bg-slate-900/60 hover:border-emerald-600'
+                  }`}
+                  type="button"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="rounded-lg bg-emerald-600 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-white">
+                          {result.type}
+                        </span>
+                        <h3 className={`truncate text-sm font-black ${strongText}`}>{result.title}</h3>
+                      </div>
+                      <p className={`mt-1 line-clamp-2 text-xs leading-relaxed ${mutedText}`}>{result.subtitle}</p>
+                    </div>
+                    <span className="flex shrink-0 items-center gap-1 rounded-xl bg-emerald-600 px-3 py-2 text-[11px] font-black text-white">
+                      {result.actionLabel} <ArrowRight className="h-3.5 w-3.5" />
+                    </span>
+                  </div>
+                </button>
+              ))
+            )}
+          </div>
+        )}
+      </section>
 
       <div className="grid grid-cols-2 gap-4">
         <button
@@ -229,7 +480,7 @@ export default function HomeScreen({ setActiveTab, onContinueReading, isLightMod
         </button>
       </div>
 
-      <div className={`rounded-3xl border p-4 ${isLightMode ? 'bg-white border-slate-200 shadow-sm' : 'bg-slate-800/60 border-slate-700/80 shadow-md'}`}>
+      <div className={`rounded-3xl border p-4 ${cardBg}`}>
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-xs uppercase font-bold text-slate-400 tracking-widest">NoorQuran Library</h3>
           <span className="text-[11px] font-bold text-emerald-500">Expanded content</span>
@@ -252,21 +503,21 @@ export default function HomeScreen({ setActiveTab, onContinueReading, isLightMod
 
       <div className="space-y-3">
         <h3 className="text-xs uppercase font-bold text-slate-400 tracking-widest">Quick Access</h3>
-        <div className="grid grid-cols-4 gap-3">
+        <div className="grid grid-cols-5 gap-2">
           {quickAccessItems.map((item) => {
             const Icon = item.icon;
             return (
               <button
                 key={item.id}
                 onClick={() => setActiveTab(item.id)}
-                className={`p-4 rounded-2xl border flex flex-col items-center justify-center gap-2 text-center transition-all active:scale-95 hover:border-emerald-500 ${
+                className={`p-2.5 rounded-2xl border flex flex-col items-center justify-center gap-2 text-center transition-all active:scale-95 hover:border-emerald-500 ${
                   isLightMode ? 'bg-white border-slate-200 shadow-sm' : 'bg-slate-800/60 border-slate-700/80 shadow-md'
                 }`}
               >
-                <div className={`w-11 h-11 rounded-2xl ${item.color} text-white flex items-center justify-center shadow-lg shadow-black/20`}>
+                <div className={`w-10 h-10 rounded-2xl ${item.color} text-white flex items-center justify-center shadow-lg shadow-black/20`}>
                   <Icon className="w-5 h-5" />
                 </div>
-                <span className="text-xs font-bold tracking-tight">{item.label}</span>
+                <span className="text-[10px] font-bold tracking-tight">{item.label}</span>
               </button>
             );
           })}
@@ -303,6 +554,18 @@ export default function HomeScreen({ setActiveTab, onContinueReading, isLightMod
           >
             Read Chapter
           </button>
+        </div>
+      </div>
+
+      <div className={`rounded-3xl border p-4 ${isLightMode ? 'bg-emerald-50 border-emerald-100 text-emerald-800' : 'bg-emerald-950/30 border-emerald-900/50 text-emerald-200'}`}>
+        <div className="flex items-start gap-3">
+          <Music className="mt-0.5 h-5 w-5 flex-shrink-0" />
+          <div>
+            <p className="text-sm font-black">Large reciter library is ready</p>
+            <p className="mt-1 text-xs leading-relaxed opacity-80">
+              Use Smart Search for names like Ali Jaber, Ayyub, Matroud, Sudais, Husary, Minshawi, Shuraim, or Alafasy.
+            </p>
+          </div>
         </div>
       </div>
     </div>
