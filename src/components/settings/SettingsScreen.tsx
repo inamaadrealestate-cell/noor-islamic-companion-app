@@ -621,13 +621,13 @@ export default function SettingsScreen({
               App Settings
             </h1>
             <p className={`text-[11px] font-semibold ${mutedText}`}>
-              Privacy, reading, audio, prayer, and device backup
+              Brand, privacy, reading, audio, prayer, and backup
             </p>
           </div>
           <span
             className={`text-[10px] font-extrabold uppercase tracking-widest px-3 py-1.5 rounded-xl border ${softPanel}`}
           >
-            v1.1
+            v1.2
           </span>
         </div>
       </div>
@@ -660,13 +660,12 @@ export default function SettingsScreen({
                   NoorQuran
                 </p>
                 <h2 className="text-xl font-extrabold leading-tight">
-                  Complete Islamic Companion
+                  Quran • Salah • Adhkar • Qibla
                 </h2>
               </div>
             </div>
             <p className="text-sm text-emerald-50/90 leading-relaxed">
-              Your settings are saved on this device first. Supabase sync can
-              work later when real environment keys and tables are configured.
+              A clean Islamic companion for Quran reading, recitations, Salah times, Adhkar, Duas, Tasbih, Qibla, reminders, and offline reading.
             </p>
             <div className="grid grid-cols-3 gap-2 text-center">
               <div className="rounded-2xl bg-white/10 border border-white/10 p-3">
@@ -1294,6 +1293,47 @@ export default function SettingsScreen({
           </button>
         </section>
 
+
+        <section className={`p-5 rounded-3xl border space-y-4 ${cardClasses}`}>
+          <div className="flex items-center gap-2.5">
+            <Sparkles className="w-5 h-5 text-amber-400" />
+            <h3 className="font-extrabold text-base">Brand & Public Release</h3>
+          </div>
+          <p className={`text-xs leading-relaxed ${mutedText}`}>
+            NoorQuran now has a cleaner public identity, improved install icon,
+            stronger metadata for sharing, and a more professional app name
+            across mobile and browser installs.
+          </p>
+          <div className="grid grid-cols-2 gap-3">
+            <div className={`rounded-2xl border p-3 ${softPanel}`}>
+              <p className="text-[11px] font-extrabold uppercase tracking-wider text-emerald-500">
+                App name
+              </p>
+              <p className="mt-1 text-sm font-extrabold">NoorQuran</p>
+              <p className={`mt-1 text-[11px] leading-relaxed ${mutedText}`}>
+                Quran, Salah, Adhkar, Tasbih and Qibla in one app.
+              </p>
+            </div>
+            <div className={`rounded-2xl border p-3 ${softPanel}`}>
+              <p className="text-[11px] font-extrabold uppercase tracking-wider text-emerald-500">
+                Release tone
+              </p>
+              <p className="mt-1 text-sm font-extrabold">Private by default</p>
+              <p className={`mt-1 text-[11px] leading-relaxed ${mutedText}`}>
+                No account required, local-first storage, and clear source notes.
+              </p>
+            </div>
+          </div>
+          <div className={`rounded-2xl border p-4 ${softPanel}`}>
+            <p className="text-sm font-extrabold">Public description</p>
+            <p className={`mt-1 text-xs leading-relaxed ${mutedText}`}>
+              NoorQuran is a private Islamic companion app for Quran reading,
+              audio recitations, Salah times, Adhkar, Duas, Tasbih, Qibla,
+              reminders, and offline reading.
+            </p>
+          </div>
+        </section>
+
         <section className={`p-5 rounded-3xl border space-y-4 ${cardClasses}`}>
           <div className="flex items-center gap-2.5">
             <ShieldCheck className="w-5 h-5 text-emerald-400" />
@@ -1402,8 +1442,8 @@ export default function SettingsScreen({
           <p
             className={`text-xs max-w-xs mx-auto leading-relaxed ${mutedText}`}
           >
-            Built to serve the Ummah with no ads, no paywalls, and no
-            unnecessary tracking. Made with{" "}
+            NoorQuran is built as a clean Islamic companion with no ads, no
+            paywalls, and no unnecessary tracking. Made with{" "}
             <Heart className="w-3.5 h-3.5 inline text-red-500 fill-current" />{" "}
             for beneficial use.
           </p>

@@ -1,7 +1,7 @@
 {
-  "name": "NoorQuran — Complete Islamic Companion App",
+  "name": "NoorQuran — Quran, Salah, Adhkar & Qibla",
   "short_name": "NoorQuran",
-  "description": "Read Qur'an, listen to recitations, track Adhkar, view prayer times, and find the Qibla direction.",
+  "description": "A private Islamic companion app for Quran reading, audio recitations, Salah times, Adhkar, Duas, Tasbih, Qibla, reminders, and offline reading.",
   "id": "/",
   "start_url": "/",
   "scope": "/",
@@ -9,10 +9,33 @@
   "display_override": ["standalone", "minimal-ui"],
   "orientation": "portrait",
   "background_color": "#020617",
-  "theme_color": "#020617",
+  "theme_color": "#064E3B",
   "categories": ["books", "education", "lifestyle", "utilities"],
   "lang": "en",
   "dir": "ltr",
+  "shortcuts": [
+    {
+      "name": "Open Quran",
+      "short_name": "Quran",
+      "description": "Continue reading Quran",
+      "url": "/?tab=quran",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Salah Times",
+      "short_name": "Salah",
+      "description": "Open Salah times",
+      "url": "/?tab=prayer",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Adhkar & Duas",
+      "short_name": "Adhkar",
+      "description": "Open Adhkar and Duas",
+      "url": "/?tab=adhkar",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    }
+  ],
   "icons": [
     {
       "src": "/icons/noor-icon.svg",
