@@ -108,6 +108,46 @@ const CALCULATION_METHODS = [
   { id: 13, name: "Diyanet İşleri Başkanlığı, Turkey" },
 ];
 
+const SOURCE_GROUPS = [
+  {
+    title: "Quran text",
+    body: "Arabic Quran text is loaded from public Quran APIs and then cached locally on this device for offline reading after you open or download a Surah.",
+  },
+  {
+    title: "Translations",
+    body: "Translations are selectable in Settings, including Sahih International, Yusuf Ali, Pickthall, Muhammad Asad, French, and Urdu editions where available from the Quran API.",
+  },
+  {
+    title: "Recitations",
+    body: "Verse-by-verse recitation audio uses public MP3 recitation libraries with verified fallback sources so the player can continue if one file fails.",
+  },
+  {
+    title: "Prayer times",
+    body: "Prayer times are calculated from your chosen location and calculation method. Timings should always be checked with your local masjid for official schedules.",
+  },
+  {
+    title: "Adhkar and Duas",
+    body: "Adhkar and duas are provided for convenience with source labels where included. Please have Arabic texts and references reviewed by a knowledgeable person before wide public promotion.",
+  },
+];
+
+const PRIVACY_POINTS = [
+  "NoorQuran works without an account.",
+  "Bookmarks, notes, settings, cached Surahs, adhkar progress, and tasbih history are stored locally on this device.",
+  "Location is only used in the browser to calculate Salah times and Qibla direction when you allow it.",
+  "Notifications are only shown after you grant browser permission.",
+  "Export Backup creates a JSON file on your device so you can move your own data manually.",
+  "Cloud sync is not active unless real Supabase environment keys and database tables are configured.",
+];
+
+const REVIEW_CHECKLIST = [
+  "Verify Arabic Adhkar and Dua text",
+  "Verify source labels and repetitions",
+  "Verify prayer method for your country or city",
+  "Verify translations fit your audience",
+  "Test audio playback for your preferred reciters",
+];
+
 function safeLocalGet(key: string): string | null {
   try {
     return localStorage.getItem(key);
@@ -1254,18 +1294,105 @@ export default function SettingsScreen({
           </button>
         </section>
 
-        <section className="p-6 bg-emerald-950/40 border border-emerald-800/50 rounded-3xl space-y-4 shadow-xl">
-          <div className="flex items-center gap-2.5 text-emerald-400">
-            <ShieldCheck className="w-5 h-5 flex-shrink-0" />
-            <h3 className="font-extrabold text-sm uppercase tracking-wider">
-              Private by Default
-            </h3>
+        <section className={`p-5 rounded-3xl border space-y-4 ${cardClasses}`}>
+          <div className="flex items-center gap-2.5">
+            <ShieldCheck className="w-5 h-5 text-emerald-400" />
+            <h3 className="font-extrabold text-base">Trust, Sources & Review</h3>
           </div>
-          <p className="text-xs text-emerald-100/90 leading-relaxed font-medium">
-            NoorQuran does not need an account for reading, adhkar, prayer
-            times, qibla, bookmarks, or settings. Data stays local unless you
-            configure cloud sync.
+          <p className={`text-xs leading-relaxed ${mutedText}`}>
+            NoorQuran should be transparent about where content comes from and
+            what still needs human review before wide public sharing.
           </p>
+
+          <div className="space-y-2">
+            {SOURCE_GROUPS.map((source) => (
+              <div key={source.title} className={`rounded-2xl border p-3 ${softPanel}`}>
+                <p className="text-sm font-extrabold text-emerald-500">
+                  {source.title}
+                </p>
+                <p className={`mt-1 text-xs leading-relaxed ${mutedText}`}>
+                  {source.body}
+                </p>
+              </div>
+            ))}
+          </div>
+
+          <div className="rounded-2xl border border-amber-400/30 bg-amber-400/10 p-4">
+            <div className="flex items-start gap-2">
+              <Info className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-extrabold text-amber-600 dark:text-amber-300">
+                  Scholarly review recommended
+                </p>
+                <p className="mt-1 text-xs leading-relaxed text-amber-700 dark:text-amber-100/90">
+                  This app is a helpful Islamic companion, but it should not be
+                  presented as an official fatwa, official masjid timetable, or
+                  final scholarly reference. Always verify religious content
+                  with qualified people.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className={`rounded-2xl border p-3 ${softPanel}`}>
+            <p className="text-xs font-extrabold uppercase tracking-wider text-emerald-500">
+              Before Public Marketing
+            </p>
+            <div className="mt-3 space-y-2">
+              {REVIEW_CHECKLIST.map((item) => (
+                <div key={item} className="flex items-center gap-2 text-xs font-bold">
+                  <Check className="w-4 h-4 text-emerald-500 flex-shrink-0" />
+                  <span>{item}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section className={`p-5 rounded-3xl border space-y-4 ${cardClasses}`}>
+          <div className="flex items-center gap-2.5">
+            <ShieldCheck className="w-5 h-5 text-emerald-400" />
+            <h3 className="font-extrabold text-base">Privacy Policy Summary</h3>
+          </div>
+          <p className={`text-xs leading-relaxed ${mutedText}`}>
+            NoorQuran is designed to be private by default and usable without
+            account signup.
+          </p>
+          <div className="space-y-2">
+            {PRIVACY_POINTS.map((point) => (
+              <div key={point} className={`flex gap-2 rounded-2xl border p-3 ${softPanel}`}>
+                <ShieldCheck className="w-4 h-4 text-emerald-500 flex-shrink-0 mt-0.5" />
+                <p className="text-xs font-semibold leading-relaxed">{point}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className={`p-5 rounded-3xl border space-y-4 ${cardClasses}`}>
+          <div className="flex items-center gap-2.5">
+            <Info className="w-5 h-5 text-emerald-400" />
+            <h3 className="font-extrabold text-base">Support & Feedback</h3>
+          </div>
+          <p className={`text-xs leading-relaxed ${mutedText}`}>
+            Use this section as your public support note until you connect a
+            dedicated support email or contact form.
+          </p>
+          <div className={`rounded-2xl border p-4 ${softPanel}`}>
+            <p className="text-sm font-extrabold">Report a correction</p>
+            <p className={`mt-1 text-xs leading-relaxed ${mutedText}`}>
+              If you notice a mistake in Arabic text, translation, source label,
+              audio, prayer time, or app behavior, record the page name, Surah or
+              dua name, device type, and screenshot before reporting it to the
+              app owner.
+            </p>
+          </div>
+          <div className={`rounded-2xl border p-4 ${softPanel}`}>
+            <p className="text-sm font-extrabold">Data removal</p>
+            <p className={`mt-1 text-xs leading-relaxed ${mutedText}`}>
+              You can remove local app data anytime from Storage Management by
+              clearing offline caches or using Factory Reset Local App Data.
+            </p>
+          </div>
         </section>
 
         <section className="text-center py-6 space-y-3 border-t border-slate-800/80">
