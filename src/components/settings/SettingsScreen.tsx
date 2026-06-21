@@ -19,6 +19,9 @@ import {
   Database,
   Sliders,
   Smartphone,
+  Share2,
+  Link as LinkIcon,
+  MessageCircle,
 } from "lucide-react";
 import {
   DEFAULT_SETTINGS,
@@ -146,6 +149,18 @@ const REVIEW_CHECKLIST = [
   "Verify prayer method for your country or city",
   "Verify translations fit your audience",
   "Test audio playback for your preferred reciters",
+];
+
+const NOORQURAN_PUBLIC_URL = "https://noorquran-eight.vercel.app";
+
+const NOORQURAN_INVITE_TEXT =
+  "Assalamu alaykum. I found NoorQuran, a clean Islamic companion app for Quran reading, recitations, Salah times, Adhkar, Duas, Tasbih, Qibla, reminders, and offline reading. You can use it in the browser or install it like an app.";
+
+const SHARE_HIGHLIGHTS = [
+  "Quran reading with bookmarks and notes",
+  "Recitations with many major reciters",
+  "Salah times, monthly timetable, and Qibla",
+  "Adhkar, Duas, Tasbih, reminders, and offline reading",
 ];
 
 function safeLocalGet(key: string): string | null {
@@ -347,6 +362,57 @@ export default function SettingsScreen({
     } catch {
       showNotice("Could not copy device ID on this browser", "warning");
     }
+  };
+
+  const copyShareText = async (text: string, successMessage: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      showNotice(successMessage);
+    } catch {
+      showNotice("Could not copy on this browser", "warning");
+    }
+  };
+
+  const handleShareApp = async () => {
+    const shareText = `${NOORQURAN_INVITE_TEXT}\n\n${NOORQURAN_PUBLIC_URL}`;
+
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: "NoorQuran",
+          text: NOORQURAN_INVITE_TEXT,
+          url: NOORQURAN_PUBLIC_URL,
+        });
+        showNotice("Share sheet opened");
+        return;
+      }
+
+      await navigator.clipboard.writeText(shareText);
+      showNotice("Share message copied");
+    } catch {
+      showNotice("Share was cancelled or blocked", "warning");
+    }
+  };
+
+  const handleCopyAppLink = () => {
+    void copyShareText(NOORQURAN_PUBLIC_URL, "NoorQuran link copied");
+  };
+
+  const handleCopyInviteMessage = () => {
+    void copyShareText(
+      `${NOORQURAN_INVITE_TEXT}\n\n${NOORQURAN_PUBLIC_URL}`,
+      "Invite message copied",
+    );
+  };
+
+  const handleWhatsAppShare = () => {
+    const text = `${NOORQURAN_INVITE_TEXT}\n\n${NOORQURAN_PUBLIC_URL}`;
+    window.open(
+      `https://wa.me/?text=${encodeURIComponent(text)}`,
+      "_blank",
+      "noopener,noreferrer",
+    );
+    showNotice("WhatsApp share opened");
   };
 
   const handleTogglePrayerNotifications = async () => {
@@ -1331,6 +1397,68 @@ export default function SettingsScreen({
               audio recitations, Salah times, Adhkar, Duas, Tasbih, Qibla,
               reminders, and offline reading.
             </p>
+          </div>
+        </section>
+
+        <section className={`p-5 rounded-3xl border space-y-4 ${cardClasses}`}>
+          <div className="flex items-center gap-2.5">
+            <Share2 className="w-5 h-5 text-emerald-400" />
+            <h3 className="font-extrabold text-base">Share & Growth</h3>
+          </div>
+          <p className={`text-xs leading-relaxed ${mutedText}`}>
+            Share NoorQuran with family, friends, students, WhatsApp groups,
+            and masjid communities without adding adverts or unnecessary
+            tracking.
+          </p>
+
+          <div className={`rounded-2xl border p-4 ${softPanel}`}>
+            <p className="text-sm font-extrabold">Public app link</p>
+            <p className={`mt-1 break-all text-xs font-semibold ${mutedText}`}>
+              {NOORQURAN_PUBLIC_URL}
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <button
+              onClick={handleShareApp}
+              className="py-3 px-4 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs flex items-center justify-center gap-2 transition-all active:scale-95 shadow"
+            >
+              <Share2 className="w-4 h-4" /> Share App
+            </button>
+            <button
+              onClick={handleCopyAppLink}
+              className={`py-3 px-4 rounded-2xl border font-extrabold text-xs flex items-center justify-center gap-2 transition-all active:scale-95 ${softPanel}`}
+            >
+              <LinkIcon className="w-4 h-4 text-emerald-500" /> Copy Link
+            </button>
+            <button
+              onClick={handleCopyInviteMessage}
+              className={`py-3 px-4 rounded-2xl border font-extrabold text-xs flex items-center justify-center gap-2 transition-all active:scale-95 ${softPanel}`}
+            >
+              <Copy className="w-4 h-4 text-emerald-500" /> Copy Invite
+            </button>
+            <button
+              onClick={handleWhatsAppShare}
+              className={`py-3 px-4 rounded-2xl border font-extrabold text-xs flex items-center justify-center gap-2 transition-all active:scale-95 ${softPanel}`}
+            >
+              <MessageCircle className="w-4 h-4 text-emerald-500" /> WhatsApp
+            </button>
+          </div>
+
+          <div className={`rounded-2xl border p-4 ${softPanel}`}>
+            <p className="text-sm font-extrabold">Invite message preview</p>
+            <p className={`mt-2 text-xs leading-relaxed ${mutedText}`}>
+              {NOORQURAN_INVITE_TEXT}
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 gap-2">
+            {SHARE_HIGHLIGHTS.map((item) => (
+              <div key={item} className={`flex items-center gap-2 rounded-2xl border p-3 ${softPanel}`}>
+                <Check className="w-4 h-4 text-emerald-500 flex-shrink-0" />
+                <p className="text-xs font-bold leading-relaxed">{item}</p>
+              </div>
+            ))}
           </div>
         </section>
 
