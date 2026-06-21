@@ -11,6 +11,7 @@ import {
   Sparkles,
   Check,
   RotateCcw,
+  Search,
   Copy,
   Download,
   Upload,
@@ -170,6 +171,7 @@ export default function SettingsScreen({
   const [notificationStatus, setNotificationStatus] =
     useState<NoorNotificationStatus>(() => getPrayerNotificationStatus());
   const [notificationTesting, setNotificationTesting] = useState(false);
+  const [reciterSearch, setReciterSearch] = useState("");
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const deviceId = getDeviceId();
 
@@ -188,6 +190,19 @@ export default function SettingsScreen({
       ) || RECITERS_LIST[0],
     [settings.default_reciter],
   );
+
+  const filteredReciters = useMemo(() => {
+    const query = reciterSearch.trim().toLowerCase();
+    if (!query) return RECITERS_LIST;
+
+    return RECITERS_LIST.filter(
+      (reciter) =>
+        reciter.name.toLowerCase().includes(query) ||
+        reciter.arabicName.includes(reciterSearch.trim()) ||
+        reciter.description.toLowerCase().includes(query) ||
+        reciter.bitrate.toLowerCase().includes(query),
+    );
+  }, [reciterSearch]);
 
   const selectedMethod = useMemo(
     () =>
@@ -638,22 +653,6 @@ export default function SettingsScreen({
             <Volume2 className="w-5 h-5 text-emerald-400" />
             <h3 className="font-extrabold text-base">Audio Reciter</h3>
           </div>
-          <select
-            value={settings.default_reciter}
-            onChange={(event) =>
-              updateSettings(
-                { ...settings, default_reciter: event.target.value },
-                "Default reciter changed",
-              )
-            }
-            className={`w-full px-4 py-3 rounded-2xl text-sm font-semibold border focus:outline-none focus:ring-2 ${inputClasses}`}
-          >
-            {RECITERS_LIST.map((reciter) => (
-              <option key={reciter.id} value={reciter.id}>
-                {reciter.name} ({reciter.style})
-              </option>
-            ))}
-          </select>
           <div
             className={`flex items-center gap-3 p-3 rounded-2xl border ${softPanel}`}
           >
@@ -669,9 +668,73 @@ export default function SettingsScreen({
                 {selectedReciter.name}
               </p>
               <p className={`text-xs ${mutedText}`}>
-                {selectedReciter.arabicName} • {selectedReciter.style}
+                {selectedReciter.arabicName} • {selectedReciter.style} • {selectedReciter.bitrate}
               </p>
             </div>
+          </div>
+
+          <div className={`rounded-2xl border p-3 ${softPanel}`}>
+            <label className="text-xs font-extrabold uppercase tracking-wider text-emerald-500">
+              Search default reciter
+            </label>
+            <div className={`mt-2 flex items-center gap-2 rounded-2xl border px-3 py-2 ${inputClasses}`}>
+              <Search className="w-4 h-4 text-emerald-500 flex-shrink-0" />
+              <input
+                type="search"
+                value={reciterSearch}
+                onChange={(event) => setReciterSearch(event.target.value)}
+                placeholder="Ali Jaber, Ayyub, Matroud, Sudais..."
+                className="w-full bg-transparent outline-none text-sm font-semibold placeholder:text-slate-500"
+              />
+            </div>
+
+            <div className="mt-3 max-h-80 overflow-y-auto no-scrollbar space-y-2 pr-1">
+              {filteredReciters.length === 0 ? (
+                <div className={`rounded-2xl border p-4 text-center ${softPanel}`}>
+                  <p className="text-sm font-extrabold">No reciter found</p>
+                  <p className={`text-xs mt-1 ${mutedText}`}>Try another name or spelling.</p>
+                </div>
+              ) : (
+                filteredReciters.map((reciter) => {
+                  const isSelected = reciter.id === settings.default_reciter;
+                  return (
+                    <button
+                      key={reciter.id}
+                      type="button"
+                      onClick={() =>
+                        updateSettings(
+                          { ...settings, default_reciter: reciter.id },
+                          `${reciter.name} set as default reciter`,
+                        )
+                      }
+                      className={`w-full p-3 rounded-2xl border flex items-center gap-3 text-left transition-all active:scale-[0.99] ${
+                        isSelected
+                          ? "bg-emerald-600 border-emerald-500 text-white shadow-lg shadow-emerald-950/30"
+                          : isLightMode
+                            ? "bg-white border-slate-200 text-slate-800 hover:bg-slate-50"
+                            : "bg-slate-950 border-slate-700 text-white hover:bg-slate-900"
+                      }`}
+                    >
+                      <img
+                        src={reciter.photoUrl}
+                        alt={reciter.name}
+                        className="w-10 h-10 rounded-xl object-cover flex-shrink-0"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-extrabold truncate">{reciter.name}</p>
+                        <p className={`text-[11px] truncate ${isSelected ? "text-emerald-50/90" : mutedText}`}>
+                          {reciter.arabicName} • {reciter.style} • {reciter.bitrate}
+                        </p>
+                      </div>
+                      {isSelected && <Check className="w-4 h-4 flex-shrink-0" />}
+                    </button>
+                  );
+                })
+              )}
+            </div>
+            <p className={`mt-2 text-[11px] ${mutedText}`}>
+              Showing {filteredReciters.length} of {RECITERS_LIST.length} reciters.
+            </p>
           </div>
         </section>
 

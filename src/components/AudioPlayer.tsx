@@ -9,7 +9,9 @@ import {
   Pause,
   Play,
   Repeat,
+  Search,
   Settings2,
+  Star,
   SkipBack,
   SkipForward,
   Volume2,
@@ -35,6 +37,30 @@ interface AudioPlayerProps {
 }
 
 type RepeatMode = 'off' | 'ayah' | 'surah';
+type ReciterFilter = 'all' | 'favorites' | 'murattal' | 'mujawwad';
+
+const FAVORITE_RECITERS_KEY = 'noor_favorite_reciters';
+
+function loadFavoriteReciters(): string[] {
+  try {
+    const raw = localStorage.getItem(FAVORITE_RECITERS_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((item) => typeof item === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveFavoriteReciters(ids: string[]): void {
+  try {
+    localStorage.setItem(FAVORITE_RECITERS_KEY, JSON.stringify(ids));
+  } catch {}
+}
+
+function normalizeSearch(value: string): string {
+  return value.trim().toLowerCase();
+}
 
 interface LatestPlaybackState {
   currentSurah: number;
@@ -86,6 +112,9 @@ export default function AudioPlayer({
   const [repeatMode, setRepeatMode] = useState<RepeatMode>('off');
   const [downloaded, setDownloaded] = useState<boolean>(false);
   const [showReciterPicker, setShowReciterPicker] = useState(false);
+  const [reciterSearch, setReciterSearch] = useState('');
+  const [reciterFilter, setReciterFilter] = useState<ReciterFilter>('all');
+  const [favoriteReciterIds, setFavoriteReciterIds] = useState<string[]>(loadFavoriteReciters);
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
   const [isBuffering, setIsBuffering] = useState(false);
@@ -106,6 +135,31 @@ export default function AudioPlayer({
 
   const surahMeta = useMemo(() => getSurahMeta(currentSurah), [currentSurah]);
   const activeReciter = useMemo(() => getReciterById(reciterId), [reciterId]);
+  const favoriteReciterSet = useMemo(() => new Set(favoriteReciterIds), [favoriteReciterIds]);
+  const filteredReciters = useMemo(() => {
+    const query = normalizeSearch(reciterSearch);
+
+    return RECITERS_LIST.filter((reciter) => {
+      const matchesQuery = !query ||
+        reciter.name.toLowerCase().includes(query) ||
+        reciter.arabicName.includes(reciterSearch.trim()) ||
+        reciter.description.toLowerCase().includes(query) ||
+        reciter.bitrate.toLowerCase().includes(query);
+
+      const matchesFilter =
+        reciterFilter === 'all' ||
+        (reciterFilter === 'favorites' && favoriteReciterSet.has(reciter.id)) ||
+        (reciterFilter === 'murattal' && reciter.style === 'Murattal') ||
+        (reciterFilter === 'mujawwad' && reciter.style === 'Mujawwad');
+
+      return matchesQuery && matchesFilter;
+    }).sort((a, b) => {
+      const aFav = favoriteReciterSet.has(a.id) ? 0 : 1;
+      const bFav = favoriteReciterSet.has(b.id) ? 0 : 1;
+      if (aFav !== bFav) return aFav - bFav;
+      return a.name.localeCompare(b.name);
+    });
+  }, [favoriteReciterSet, reciterFilter, reciterSearch]);
   const audioUrl = useMemo(
     () => getVerseAudioUrl(reciterId, currentSurah, currentAyah),
     [reciterId, currentSurah, currentAyah],
@@ -388,6 +442,16 @@ export default function AudioPlayer({
     if (audioRef.current) audioRef.current.currentTime = nextTime;
   };
 
+  const toggleFavoriteReciter = (reciterIdToToggle: string) => {
+    setFavoriteReciterIds((current) => {
+      const next = current.includes(reciterIdToToggle)
+        ? current.filter((id) => id !== reciterIdToToggle)
+        : [...current, reciterIdToToggle];
+      saveFavoriteReciters(next);
+      return next;
+    });
+  };
+
   const handleCacheCurrentAyah = async () => {
     setCacheStatus('Saving current ayah audio...');
 
@@ -532,42 +596,112 @@ export default function AudioPlayer({
               <div className="flex flex-col gap-4 pb-10">
                 <div>
                   <h3 className="text-xl font-black">Select Reciter</h3>
-                  <p className={`text-xs mt-1 ${mutedText}`}>Changing reciter updates the player immediately.</p>
+                  <p className={`text-xs mt-1 ${mutedText}`}>Search, filter, and favorite your main reciters for faster access.</p>
+                </div>
+
+                <div className={`rounded-2xl border p-3 ${cardBase}`}>
+                  <label className={`text-[11px] font-black uppercase tracking-wider ${mutedText}`}>Search reciters</label>
+                  <div className={`mt-2 flex items-center gap-2 rounded-2xl border px-3 py-2 ${isLightMode ? 'bg-white border-slate-200' : 'bg-slate-950 border-slate-700'}`}>
+                    <Search className="w-4 h-4 text-emerald-500 flex-shrink-0" />
+                    <input
+                      type="search"
+                      value={reciterSearch}
+                      onChange={(event) => setReciterSearch(event.target.value)}
+                      placeholder="Search Ali Jaber, Ayyub, Matroud..."
+                      className="w-full bg-transparent outline-none text-sm font-semibold placeholder:text-slate-500"
+                    />
+                  </div>
+
+                  <div className="mt-3 flex gap-2 overflow-x-auto no-scrollbar pb-1">
+                    {([
+                      ['all', 'All'],
+                      ['favorites', `Favorites ${favoriteReciterIds.length ? `(${favoriteReciterIds.length})` : ''}`],
+                      ['murattal', 'Murattal'],
+                      ['mujawwad', 'Mujawwad'],
+                    ] as const).map(([filter, label]) => (
+                      <button
+                        key={filter}
+                        type="button"
+                        onClick={() => setReciterFilter(filter)}
+                        className={`px-3 py-2 rounded-xl text-xs font-black border whitespace-nowrap transition-all active:scale-95 ${
+                          reciterFilter === filter
+                            ? 'bg-emerald-600 border-emerald-500 text-white'
+                            : softButton
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
                 <div className="space-y-2.5">
-                  {RECITERS_LIST.map((reciter) => {
-                    const isSelected = reciter.id === reciterId;
-                    return (
-                      <button
-                        key={reciter.id}
-                        type="button"
-                        onClick={() => {
-                          onReciterChange(reciter.id);
-                          setShowReciterPicker(false);
-                          onPlayStateChange(false);
-                        }}
-                        className={`w-full p-3 rounded-2xl flex items-center gap-4 border text-left transition-all active:scale-[0.99] ${
-                          isSelected
-                            ? 'bg-emerald-600 border-emerald-500 text-white shadow-lg shadow-emerald-950/30'
-                            : cardBase
-                        }`}
-                      >
-                        <img src={reciter.photoUrl} alt={reciter.name} className="w-14 h-14 rounded-xl object-cover shadow flex-shrink-0" />
-                        <div className="flex-1 overflow-hidden min-w-0">
-                          <p className="text-sm font-extrabold truncate">{reciter.name}</p>
-                          <p className={`text-xs font-arabic font-semibold mt-0.5 ${isSelected ? 'text-emerald-50' : 'text-emerald-500'}`}>
-                            {reciter.arabicName}
-                          </p>
-                          <p className={`text-[11px] mt-1 line-clamp-2 ${isSelected ? 'text-emerald-50/85' : mutedText}`}>
-                            {reciter.style} • {reciter.bitrate}
-                          </p>
+                  {filteredReciters.length === 0 ? (
+                    <div className={`p-5 rounded-2xl border text-center ${cardBase}`}>
+                      <p className="text-sm font-extrabold">No reciter found</p>
+                      <p className={`text-xs mt-1 ${mutedText}`}>Try another spelling or switch the filter back to All.</p>
+                    </div>
+                  ) : (
+                    filteredReciters.map((reciter) => {
+                      const isSelected = reciter.id === reciterId;
+                      const isFavorite = favoriteReciterSet.has(reciter.id);
+                      return (
+                        <div
+                          key={reciter.id}
+                          className={`w-full p-3 rounded-2xl flex items-center gap-3 border text-left transition-all ${
+                            isSelected
+                              ? 'bg-emerald-600 border-emerald-500 text-white shadow-lg shadow-emerald-950/30'
+                              : cardBase
+                          }`}
+                        >
+                          <button
+                            type="button"
+                            onClick={() => {
+                              onReciterChange(reciter.id);
+                              setShowReciterPicker(false);
+                              onPlayStateChange(false);
+                            }}
+                            className="flex items-center gap-4 flex-1 min-w-0 text-left active:scale-[0.99]"
+                          >
+                            <img src={reciter.photoUrl} alt={reciter.name} className="w-14 h-14 rounded-xl object-cover shadow flex-shrink-0" />
+                            <div className="flex-1 overflow-hidden min-w-0">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <p className="text-sm font-extrabold truncate">{reciter.name}</p>
+                                {isSelected && <Check className="w-4 h-4 flex-shrink-0" />}
+                              </div>
+                              <p className={`text-xs font-arabic font-semibold mt-0.5 ${isSelected ? 'text-emerald-50' : 'text-emerald-500'}`}>
+                                {reciter.arabicName}
+                              </p>
+                              <p className={`text-[11px] mt-1 line-clamp-2 ${isSelected ? 'text-emerald-50/85' : mutedText}`}>
+                                {reciter.style} • {reciter.bitrate} • {reciter.description}
+                              </p>
+                            </div>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => toggleFavoriteReciter(reciter.id)}
+                            className={`p-2 rounded-xl border transition-all active:scale-95 ${
+                              isFavorite
+                                ? 'bg-amber-400/20 border-amber-400/40 text-amber-300'
+                                : isSelected
+                                  ? 'border-emerald-300/50 text-emerald-50 hover:bg-white/10'
+                                  : softButton
+                            }`}
+                            title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+                            aria-label={isFavorite ? `Remove ${reciter.name} from favorites` : `Add ${reciter.name} to favorites`}
+                          >
+                            <Star className={`w-4 h-4 ${isFavorite ? 'fill-current' : ''}`} />
+                          </button>
                         </div>
-                        {isSelected && <Check className="w-5 h-5 flex-shrink-0" />}
-                      </button>
-                    );
-                  })}
+                      );
+                    })
+                  )}
                 </div>
+
+                <p className={`text-[11px] text-center ${mutedText}`}>
+                  Showing {filteredReciters.length} of {RECITERS_LIST.length} reciters. Favorite your main reciters so they always appear first.
+                </p>
               </div>
             ) : (
               <>
