@@ -353,14 +353,14 @@ export default function PrayerScreen({ isLightMode, settings, onUpdateSettings }
             </button>
           </div>
 
-          <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
+          <div className="grid grid-cols-3 gap-2 pb-1 min-[390px]:gap-2.5">
             {QUICK_LOCATIONS.map((preset) => (
               <button
                 key={preset.label}
                 onClick={() => applyLocation(preset)}
-                className={`px-3 py-2 rounded-full border text-[11px] font-extrabold whitespace-nowrap transition-all active:scale-95 ${
+                className={`min-w-0 rounded-full border px-1.5 py-2 text-center text-[10px] font-extrabold leading-none tracking-[-0.03em] whitespace-nowrap transition-all active:scale-95 min-[390px]:px-2 min-[390px]:text-[11px] ${
                   location.label === preset.label
-                    ? 'bg-emerald-600 border-emerald-500 text-white'
+                    ? 'bg-emerald-600 border-emerald-500 text-white shadow-md shadow-emerald-950/25'
                     : isLightMode
                       ? 'bg-slate-50 border-slate-200 text-slate-600 hover:border-emerald-400'
                       : 'bg-slate-900 border-slate-700 text-slate-300 hover:border-emerald-500'
