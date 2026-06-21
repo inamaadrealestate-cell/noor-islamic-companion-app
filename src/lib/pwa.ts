@@ -249,7 +249,7 @@ export async function requestPrayerNotificationPermission(): Promise<{
       serviceWorkerReady: Boolean(registration),
       message: registration
         ? "Notifications enabled. NoorQuran can now show reminders on this device."
-        : "Notification permission granted, but the service worker is not ready yet. Refresh once and try again.",
+        : "Notification permission is allowed. Refresh once if reminders do not appear immediately.",
     };
   }
 

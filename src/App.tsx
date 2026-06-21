@@ -1,4 +1,4 @@
-import { Component, ErrorInfo, ReactNode, useEffect, useState } from "react";
+import { Component, ReactNode, useEffect, useState } from "react";
 import Navigation from "./components/Navigation";
 import AudioPlayer from "./components/AudioPlayer";
 import HomeScreen from "./components/home/HomeScreen";
@@ -8,7 +8,7 @@ import QiblaCompass from "./components/qibla/QiblaCompass";
 import PrayerScreen from "./components/prayer/PrayerScreen";
 import SettingsScreen from "./components/settings/SettingsScreen";
 import TasbihScreen from "./components/tasbih/TasbihScreen";
-import { Storage, UserSettings } from "./lib/supabase";
+import { Storage, UserSettings } from "./lib/storage";
 
 type AppTab = "home" | "quran" | "prayer" | "adhkar" | "tasbih" | "qibla" | "settings";
 
@@ -53,10 +53,6 @@ class AppErrorBoundary extends Component<AppErrorBoundaryProps, AppErrorBoundary
     };
   }
 
-  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error("NoorQuran screen crashed", error, errorInfo);
-  }
-
   private handleReload = () => {
     window.location.reload();
   };
@@ -87,13 +83,8 @@ class AppErrorBoundary extends Component<AppErrorBoundaryProps, AppErrorBoundary
           </div>
           <h1 className="text-2xl font-extrabold tracking-tight">Something needs a refresh</h1>
           <p className={`mt-3 text-sm leading-relaxed ${isLightMode ? "text-slate-600" : "text-slate-400"}`}>
-            NoorQuran protected the app from a screen error. Refresh the app, or reset the current view if it keeps happening.
+            NoorQuran protected your session. Refresh the app, or reset the current view if it keeps happening.
           </p>
-          {this.state.errorMessage && (
-            <p className={`mt-4 rounded-2xl p-3 text-xs font-semibold ${isLightMode ? "bg-slate-100 text-slate-600" : "bg-slate-800 text-slate-300"}`}>
-              {this.state.errorMessage}
-            </p>
-          )}
           <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-3">
             <button
               onClick={this.handleReload}
@@ -232,7 +223,7 @@ export default function App() {
         {showOnlineRestored && (
           <div className="fixed top-3 left-0 right-0 z-[60] px-4 pointer-events-none">
             <div className="max-w-lg mx-auto rounded-2xl border border-emerald-500/30 bg-emerald-600/90 text-white px-4 py-3 shadow-xl backdrop-blur-md text-xs font-extrabold">
-              Back online. NoorQuran can sync and load live content again.
+              Back online. NoorQuran can load fresh content again.
             </div>
           </div>
         )}
@@ -247,7 +238,7 @@ export default function App() {
               }`}
             >
               <div>
-                <p className="text-sm font-extrabold">New NoorQuran update is ready</p>
+                <p className="text-sm font-extrabold">A NoorQuran update is ready</p>
                 <p className={`text-xs ${isLightMode ? "text-slate-500" : "text-slate-400"}`}>Refresh once to use the latest version.</p>
               </div>
               <button

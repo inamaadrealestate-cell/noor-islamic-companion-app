@@ -41,6 +41,13 @@ interface AudioPlayerProps {
 
 type RepeatMode = "off" | "ayah" | "surah";
 type ReciterFilter = "all" | "favorites" | "murattal" | "mujawwad";
+type DownloadToastKind = "saving" | "saved" | "error";
+
+interface DownloadToastState {
+  visible: boolean;
+  message: string;
+  kind: DownloadToastKind;
+}
 
 const FAVORITE_RECITERS_KEY = "noor_favorite_reciters";
 
@@ -144,8 +151,14 @@ export default function AudioPlayer({
   const [isOnline, setIsOnline] = useState(() =>
     typeof navigator === "undefined" ? true : navigator.onLine,
   );
+  const [downloadToast, setDownloadToast] = useState<DownloadToastState>({
+    visible: false,
+    message: "",
+    kind: "saving",
+  });
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const downloadToastTimerRef = useRef<number | null>(null);
   const objectUrlRef = useRef<string | null>(null);
   const shouldAutoContinueRef = useRef(false);
   const latestRef = useRef<LatestPlaybackState>({
@@ -258,6 +271,13 @@ export default function AudioPlayer({
     };
   }, []);
 
+  useEffect(() => {
+    return () => {
+      if (downloadToastTimerRef.current) {
+        window.clearTimeout(downloadToastTimerRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     setAudioSourceIndex(0);
@@ -533,6 +553,18 @@ export default function AudioPlayer({
     });
   };
 
+  const showDownloadToast = (message: string, kind: DownloadToastKind = "saving") => {
+    if (downloadToastTimerRef.current) {
+      window.clearTimeout(downloadToastTimerRef.current);
+    }
+
+    setDownloadToast({ visible: true, message, kind });
+    downloadToastTimerRef.current = window.setTimeout(() => {
+      setDownloadToast((current) => ({ ...current, visible: false }));
+      downloadToastTimerRef.current = null;
+    }, kind === "saving" ? 1800 : 3200);
+  };
+
   const handleRetryAudio = () => {
     setPlayerError("");
     setCacheStatus("Retrying audio source...");
@@ -545,10 +577,12 @@ export default function AudioPlayer({
   };
 
   const handleCacheCurrentAyah = async () => {
+    showDownloadToast("Saving ayah audio...", "saving");
     setCacheStatus("Saving current ayah audio...");
 
     if (!("caches" in window)) {
       setCacheStatus("This browser does not support audio caching.");
+      showDownloadToast("Audio download is not supported on this browser.", "error");
       return;
     }
 
@@ -571,11 +605,13 @@ export default function AudioPlayer({
       }
 
       setCacheStatus("Saved for offline playback on this browser.");
+      showDownloadToast("Ayah audio saved offline.", "saved");
       setTimeout(() => setCacheStatus(""), 3500);
     } catch {
       setCacheStatus(
         "Could not save this audio. It still works online; try again or use another reciter.",
       );
+      showDownloadToast("Could not save audio. Try again.", "error");
     }
   };
 
@@ -593,6 +629,31 @@ export default function AudioPlayer({
 
   return (
     <>
+      {downloadToast.visible && (
+        <div className="fixed left-0 right-0 z-[80] px-4 pointer-events-none noor-download-toast-bottom">
+          <div
+            className={`mx-auto flex w-fit max-w-[92vw] items-center gap-2 rounded-full border px-3 py-2 text-[11px] font-extrabold shadow-2xl backdrop-blur-md ${
+              downloadToast.kind === "saved"
+                ? "border-emerald-400/40 bg-emerald-600 text-white"
+                : downloadToast.kind === "error"
+                  ? "border-red-400/40 bg-red-600 text-white"
+                  : isLightMode
+                    ? "border-slate-200 bg-white/95 text-slate-800"
+                    : "border-slate-700 bg-slate-900/95 text-white"
+            }`}
+          >
+            {downloadToast.kind === "saved" ? (
+              <Check className="h-3.5 w-3.5" />
+            ) : downloadToast.kind === "error" ? (
+              <AlertCircle className="h-3.5 w-3.5" />
+            ) : (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            )}
+            <span>{downloadToast.message}</span>
+          </div>
+        </div>
+      )}
+
       <div
         className={`fixed left-0 right-0 z-30 border-t backdrop-blur-md transition-all noor-audio-bottom ${
           isLightMode

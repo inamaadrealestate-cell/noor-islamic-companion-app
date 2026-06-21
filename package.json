@@ -1,5 +1,5 @@
 {
-  "name": "react-vite-tailwind",
+  "name": "noorquran",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -9,7 +9,6 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.108.2",
     "clsx": "2.1.1",
     "lucide-react": "^1.21.0",
     "react": "19.2.6",

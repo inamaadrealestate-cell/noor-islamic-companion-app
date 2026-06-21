@@ -1,0 +1,23 @@
+NoorQuran Public Production Audit Report
+
+Completed cleanup scope:
+1. Removed public-facing backend/Supabase references from the active app code.
+2. Replaced the old frontend Supabase helper with local-first storage in src/lib/storage.ts.
+3. Removed the visible anonymous device ID section from Settings.
+4. Removed service-worker/technical implementation wording from notification UI messages.
+5. Removed raw error details and console debug logging from the app crash screen.
+6. Simplified Settings wording for public visitors: privacy, sources, data backup, reminders, and sharing.
+7. Kept the website free access with no login requirement.
+8. Kept public features: Quran, reciters, Salah, monthly timetable, Adhkar, Duas, Tasbih, Qibla, Settings, offline cache, reminders, PWA install, and sharing.
+9. Added clean .gitignore and .vercelignore so backups, env files, build output, node_modules, logs, and local deployment metadata are not deployed or committed.
+10. Removed @supabase/supabase-js from package.json and package-lock root dependency.
+
+Security and privacy outcome:
+- No API keys or secrets are included in the provided replacement files.
+- No Supabase project URL, anon key, table names, or frontend database calls remain in the active replacement files.
+- Visitors only see public-facing app controls and privacy/source notes.
+- Personal user data remains local-first and optional backup remains user-controlled.
+
+Validation:
+- npm run build passed.
+- npx tsc --noEmit passed.

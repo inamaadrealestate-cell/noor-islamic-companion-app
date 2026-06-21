@@ -1,18 +1,3 @@
-import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-
-const supabaseUrl = (import.meta as any).env.VITE_SUPABASE_URL || '';
-const supabaseAnonKey = (import.meta as any).env.VITE_SUPABASE_ANON_KEY || '';
-
-const hasSupabaseConfig =
-  supabaseUrl.startsWith('https://') &&
-  supabaseAnonKey.length > 20 &&
-  !supabaseUrl.includes('xyzcompany') &&
-  supabaseAnonKey !== 'public-anon-key';
-
-export const supabase: SupabaseClient | null = hasSupabaseConfig
-  ? createClient(supabaseUrl, supabaseAnonKey)
-  : null;
-
 function safeGetLocalStorage(key: string): string | null {
   try {
     return localStorage.getItem(key);
@@ -33,23 +18,26 @@ function safeRemoveLocalStorage(key: string): void {
   } catch {}
 }
 
-// Helper to get or generate anonymous device ID
+function makeLocalId(prefix: string): string {
+  const randomValue =
+    typeof crypto !== 'undefined' && 'randomUUID' in crypto
+      ? crypto.randomUUID()
+      : `${Date.now()}_${Math.random().toString(36).slice(2, 12)}`;
+  return `${prefix}_${randomValue}`;
+}
+
 export function getDeviceId(): string {
   const key = 'noor_device_id';
   let deviceId = safeGetLocalStorage(key);
 
   if (!deviceId) {
-    deviceId = `device_${crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2)}`;
+    deviceId = makeLocalId('noor');
     safeSetLocalStorage(key, deviceId);
-
-    // Register device in Supabase only when real env keys are configured.
-    supabase?.from('devices').insert([{ device_id: deviceId }]).then(() => {}, () => {});
   }
 
   return deviceId;
 }
 
-// Data Types
 export interface Bookmark {
   id: string;
   surah_number: number;
@@ -87,7 +75,6 @@ export interface UserSettings {
   calculation_method: number;
 }
 
-// Default Settings
 export const DEFAULT_SETTINGS: UserSettings = {
   theme: 'dark',
   translation_edition: 'en.sahih',
@@ -97,10 +84,8 @@ export const DEFAULT_SETTINGS: UserSettings = {
   show_translation: true,
   show_transliteration: true,
   prayer_notifications: false,
-  calculation_method: 4, // Umm al-Qura
+  calculation_method: 4,
 };
-
-// --- Storage Wrappers (LocalStorage first, optional Supabase sync) ---
 
 export const Storage = {
   getSettings(): UserSettings {
@@ -115,12 +100,6 @@ export const Storage = {
 
   async saveSettings(settings: UserSettings): Promise<void> {
     safeSetLocalStorage('noor_settings', JSON.stringify(settings));
-    if (!supabase) return;
-
-    const device_id = getDeviceId();
-    try {
-      await supabase.from('user_settings').upsert({ device_id, ...settings });
-    } catch {}
   },
 
   getProgress(): ReadingProgress {
@@ -141,12 +120,6 @@ export const Storage = {
 
   async saveProgress(progress: ReadingProgress): Promise<void> {
     safeSetLocalStorage('noor_progress', JSON.stringify(progress));
-    if (!supabase) return;
-
-    const device_id = getDeviceId();
-    try {
-      await supabase.from('reading_progress').upsert({ device_id, ...progress });
-    } catch {}
   },
 
   getBookmarks(): Bookmark[] {
@@ -161,32 +134,19 @@ export const Storage = {
 
   async addBookmark(bookmark: Omit<Bookmark, 'id' | 'created_at'>): Promise<Bookmark> {
     const newBookmark: Bookmark = {
-      id: `bm_${Math.random().toString(36).slice(2, 11)}`,
+      id: makeLocalId('bm'),
       created_at: new Date().toISOString(),
       ...bookmark,
     };
 
     const bookmarks = [newBookmark, ...this.getBookmarks()];
     safeSetLocalStorage('noor_bookmarks', JSON.stringify(bookmarks));
-
-    if (supabase) {
-      const device_id = getDeviceId();
-      try {
-        await supabase.from('bookmarks').insert([{ device_id, ...newBookmark }]);
-      } catch {}
-    }
-
     return newBookmark;
   },
 
   async removeBookmark(id: string): Promise<void> {
-    const bookmarks = this.getBookmarks().filter((b) => b.id !== id);
+    const bookmarks = this.getBookmarks().filter((bookmark) => bookmark.id !== id);
     safeSetLocalStorage('noor_bookmarks', JSON.stringify(bookmarks));
-
-    if (!supabase) return;
-    try {
-      await supabase.from('bookmarks').delete().eq('id', id);
-    } catch {}
   },
 
   getAdhkarProgress(date: string): Record<string, number> {
@@ -203,26 +163,12 @@ export const Storage = {
     date: string,
     dhikrId: string,
     count: number,
-    target: number,
-    category: string,
+    _target: number,
+    _category: string,
   ): Promise<void> {
     const current = this.getAdhkarProgress(date);
     current[dhikrId] = count;
     safeSetLocalStorage(`noor_adhkar_${date}`, JSON.stringify(current));
-
-    if (!supabase) return;
-    const device_id = getDeviceId();
-
-    try {
-      await supabase.from('adhkar_progress').upsert({
-        device_id,
-        category,
-        dhikr_id: dhikrId,
-        completed_count: count,
-        target_count: target,
-        date,
-      });
-    } catch {}
   },
 
   clearDownloadFlags(): void {

@@ -135,3 +135,14 @@ textarea {
     height: 1.15rem;
   }
 }
+
+/* Tiny download notification position: above mini-player and bottom nav */
+.noor-download-toast-bottom {
+  bottom: calc(var(--noor-nav-height, 4.5rem) + var(--noor-audio-height, 4.75rem) + env(safe-area-inset-bottom) + 0.65rem);
+}
+
+@media (max-width: 380px) {
+  .noor-download-toast-bottom {
+    bottom: calc(var(--noor-nav-height, 4.25rem) + var(--noor-audio-height, 4.5rem) + env(safe-area-inset-bottom) + 0.5rem);
+  }
+}

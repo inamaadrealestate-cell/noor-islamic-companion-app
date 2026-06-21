@@ -22,7 +22,7 @@ import {
   NextPrayerInfo,
   readSavedPrayerLocation,
 } from '../../lib/prayerTimes';
-import { Storage, ReadingProgress } from '../../lib/supabase';
+import { Storage, ReadingProgress } from '../../lib/storage';
 import { SURAH_LIST } from '../../lib/surahData';
 import { ADHKAR_CATEGORIES, DUAS_LIST } from '../../lib/adhkarData';
 import { RECITERS_LIST } from '../../lib/audioData';
@@ -223,7 +223,7 @@ export default function HomeScreen({ setActiveTab, onContinueReading, isLightMod
   const englishWeekday = prayerData?.date.gregorian.weekday?.en || '';
   const dateText = prayerData
     ? `${prayerData.date.hijri.date} • ${arabicWeekday} • ${englishWeekday}, ${prayerData.date.gregorian.date}`
-    : 'Preparing today’s Islamic dashboard...';
+    : 'Preparing today’s Islamic home...';
   const currentPage = Math.max(1, progress.page_number || 1);
   const pagesReadToday = Math.max(0, currentPage - todayStartPage);
   const readingGoalPercent = Math.min(100, Math.round((pagesReadToday / Math.max(1, readingGoal)) * 100));

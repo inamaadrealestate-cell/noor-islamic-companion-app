@@ -22,7 +22,7 @@ import {
   HardDrive,
 } from "lucide-react";
 import { JUZ_LIST, SURAH_LIST } from "../../lib/surahData";
-import { Bookmark, Storage, UserSettings } from "../../lib/supabase";
+import { Bookmark, Storage, UserSettings } from "../../lib/storage";
 
 interface QuranScreenProps {
   currentSurah: number;

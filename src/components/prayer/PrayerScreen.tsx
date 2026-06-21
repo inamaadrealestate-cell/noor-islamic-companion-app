@@ -16,7 +16,7 @@ import {
   savePrayerLocation,
   searchPrayerCityCoordinates,
 } from '../../lib/prayerTimes';
-import { UserSettings } from '../../lib/supabase';
+import { UserSettings } from '../../lib/storage';
 
 interface PrayerScreenProps {
   isLightMode: boolean;

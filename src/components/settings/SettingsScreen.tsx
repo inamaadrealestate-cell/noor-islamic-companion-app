@@ -16,18 +16,12 @@ import {
   Download,
   Upload,
   Info,
-  Database,
   Sliders,
-  Smartphone,
   Share2,
   Link as LinkIcon,
   MessageCircle,
 } from "lucide-react";
-import {
-  DEFAULT_SETTINGS,
-  UserSettings,
-  getDeviceId,
-} from "../../lib/supabase";
+import { DEFAULT_SETTINGS, UserSettings } from "../../lib/storage";
 import { AUDIO_CACHE_NAME, RECITERS_LIST } from "../../lib/audioData";
 import {
   getAdhkarReminderSettings,
@@ -57,7 +51,6 @@ const STORAGE_KEYS = {
   settings: "noor_settings",
   progress: "noor_progress",
   bookmarks: "noor_bookmarks",
-  device: "noor_device_id",
   prayerLocation: "noor_prayer_location",
   qiblaLocation: "noor_qibla_location",
 };
@@ -114,15 +107,15 @@ const CALCULATION_METHODS = [
 const SOURCE_GROUPS = [
   {
     title: "Quran text",
-    body: "Arabic Quran text is loaded from public Quran APIs and then cached locally on this device for offline reading after you open or download a Surah.",
+    body: "Arabic Quran text is available in the reading section and can be saved locally on your device for offline reading after you open or download a Surah.",
   },
   {
     title: "Translations",
-    body: "Translations are selectable in Settings, including Sahih International, Yusuf Ali, Pickthall, Muhammad Asad, French, and Urdu editions where available from the Quran API.",
+    body: "Translations are selectable in Settings, including well-known English, French, and Urdu editions where available.",
   },
   {
     title: "Recitations",
-    body: "Verse-by-verse recitation audio uses public MP3 recitation libraries with verified fallback sources so the player can continue if one file fails.",
+    body: "Verse-by-verse recitation audio is provided through trusted public recitation sources with fallback playback support.",
   },
   {
     title: "Prayer times",
@@ -139,8 +132,7 @@ const PRIVACY_POINTS = [
   "Bookmarks, notes, settings, cached Surahs, adhkar progress, and tasbih history are stored locally on this device.",
   "Location is only used in the browser to calculate Salah times and Qibla direction when you allow it.",
   "Notifications are only shown after you grant browser permission.",
-  "Export Backup creates a JSON file on your device so you can move your own data manually.",
-  "Cloud sync is not active unless real Supabase environment keys and database tables are configured.",
+  "Export Backup lets you save your own app data on your device and move it manually.",
 ];
 
 const REVIEW_CHECKLIST = [
@@ -242,8 +234,6 @@ export default function SettingsScreen({
   const [reminderTesting, setReminderTesting] = useState(false);
   const [reciterSearch, setReciterSearch] = useState("");
   const importInputRef = useRef<HTMLInputElement | null>(null);
-  const deviceId = getDeviceId();
-
   const selectedTranslation = useMemo(
     () =>
       TRANSLATIONS.find(
@@ -353,15 +343,6 @@ export default function SettingsScreen({
 
   const handleResetSettings = () => {
     updateSettings(DEFAULT_SETTINGS, "Settings restored to default");
-  };
-
-  const handleCopyDeviceId = async () => {
-    try {
-      await navigator.clipboard.writeText(deviceId);
-      showNotice("Anonymous device ID copied");
-    } catch {
-      showNotice("Could not copy device ID on this browser", "warning");
-    }
   };
 
   const copyShareText = async (text: string, successMessage: string) => {
@@ -574,14 +555,14 @@ export default function SettingsScreen({
       return {
         tone: "success" as const,
         title: "Notifications are ready",
-        body: "The service worker is active and NoorQuran has permission to show prayer notifications on this device. For best background reliability, install the app.",
+        body: "NoorQuran has permission to show prayer notifications on this device. For best background reliability, install the app.",
       };
     }
 
     return {
       tone: "warning" as const,
       title: "Permission needed",
-      body: "Turn on prayer notifications to ask your browser for permission. The service worker is already included in the app.",
+      body: "Turn on prayer notifications to ask your browser for permission.",
     };
   })();
 
@@ -651,7 +632,7 @@ export default function SettingsScreen({
       );
     } catch {
       showNotice(
-        "Backup import failed. Please choose a valid JSON backup.",
+        "Backup import failed. Please choose a valid NoorQuran backup file.",
         "warning",
       );
     } finally {
@@ -662,7 +643,7 @@ export default function SettingsScreen({
   const handleFactoryReset = () => {
     if (!confirmReset) {
       setConfirmReset(true);
-      showNotice("Tap factory reset again to confirm", "warning");
+      showNotice("Tap reset again to confirm", "warning");
       window.setTimeout(() => setConfirmReset(false), 5000);
       return;
     }
@@ -672,7 +653,7 @@ export default function SettingsScreen({
     setStorageStats(estimateStorageUsage());
     setConfirmReset(false);
     showNotice(
-      "Local NoorQuran data cleared. Refresh the app for a clean start.",
+      "NoorQuran data cleared. Refresh the app for a clean start.",
     );
   };
 
@@ -687,13 +668,13 @@ export default function SettingsScreen({
               App Settings
             </h1>
             <p className={`text-[11px] font-semibold ${mutedText}`}>
-              Brand, privacy, reading, audio, prayer, and backup
+              Privacy, reading, audio, prayer, and app controls
             </p>
           </div>
           <span
             className={`text-[10px] font-extrabold uppercase tracking-widest px-3 py-1.5 rounded-xl border ${softPanel}`}
           >
-            v1.2
+            Public
           </span>
         </div>
       </div>
@@ -737,7 +718,7 @@ export default function SettingsScreen({
               <div className="rounded-2xl bg-white/10 border border-white/10 p-3">
                 <p className="text-lg font-extrabold">{storageStats.keys}</p>
                 <p className="text-[10px] text-emerald-100 uppercase font-bold">
-                  Items
+                  Saved
                 </p>
               </div>
               <div className="rounded-2xl bg-white/10 border border-white/10 p-3">
@@ -745,7 +726,7 @@ export default function SettingsScreen({
                   {bytesToReadable(storageStats.bytes)}
                 </p>
                 <p className="text-[10px] text-emerald-100 uppercase font-bold">
-                  Storage
+                  Data
                 </p>
               </div>
               <div className="rounded-2xl bg-white/10 border border-white/10 p-3">
@@ -1243,31 +1224,12 @@ export default function SettingsScreen({
 
         <section className={`p-5 rounded-3xl border space-y-4 ${cardClasses}`}>
           <div className="flex items-center gap-2.5">
-            <Database className="w-5 h-5 text-emerald-400" />
-            <h3 className="font-extrabold text-base">Backup & Device Data</h3>
+            <Download className="w-5 h-5 text-emerald-400" />
+            <h3 className="font-extrabold text-base">My Data Backup</h3>
           </div>
-          <div className={`p-3 rounded-2xl border ${softPanel}`}>
-            <div className="flex items-center gap-2 mb-2">
-              <Smartphone className="w-4 h-4 text-emerald-500" />
-              <span className="text-xs font-extrabold uppercase tracking-wider text-emerald-500">
-                Anonymous Device ID
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <code
-                className={`min-w-0 flex-1 truncate text-[11px] px-3 py-2 rounded-xl border ${softPanel}`}
-              >
-                {deviceId}
-              </code>
-              <button
-                onClick={handleCopyDeviceId}
-                className="p-2 rounded-xl bg-emerald-600 text-white active:scale-95"
-                title="Copy device ID"
-              >
-                <Copy className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
+          <p className={`text-xs leading-relaxed ${mutedText}`}>
+            Save or restore your personal NoorQuran settings, bookmarks, notes, and progress. This is optional and does not require an account.
+          </p>
 
           <div className="grid grid-cols-2 gap-3">
             <button
@@ -1295,7 +1257,7 @@ export default function SettingsScreen({
         <section className={`p-5 rounded-3xl border space-y-4 ${cardClasses}`}>
           <div className="flex items-center gap-2.5">
             <Trash2 className="w-5 h-5 text-red-400" />
-            <h3 className="font-extrabold text-base">Storage Management</h3>
+            <h3 className="font-extrabold text-base">Saved Offline Data</h3>
           </div>
           <div
             className={`grid grid-cols-3 gap-3 text-center text-xs ${mutedText}`}
@@ -1316,7 +1278,7 @@ export default function SettingsScreen({
               <p className="text-lg font-extrabold text-emerald-500">
                 {bytesToReadable(storageStats.bytes)}
               </p>
-              <p className="font-bold">Estimated usage</p>
+              <p className="font-bold">Saved data</p>
             </div>
           </div>
           <p className={`text-xs leading-relaxed ${mutedText}`}>
@@ -1327,22 +1289,19 @@ export default function SettingsScreen({
             onClick={handleClearDownloadCache}
             className={`w-full py-3 rounded-2xl font-extrabold text-xs flex items-center justify-center gap-2 border transition-all active:scale-95 ${softPanel}`}
           >
-            <Trash2 className="w-4 h-4 text-red-400" /> Clear Offline Audio
-            Cache
+            <Trash2 className="w-4 h-4 text-red-400" /> Clear Saved Audio
           </button>
           <button
             onClick={handleClearQuranTextCache}
             className={`w-full py-3 rounded-2xl font-extrabold text-xs flex items-center justify-center gap-2 border transition-all active:scale-95 ${softPanel}`}
           >
-            <Trash2 className="w-4 h-4 text-red-400" /> Clear Offline Quran Text
-            Cache
+            <Trash2 className="w-4 h-4 text-red-400" /> Clear Saved Quran Text
           </button>
           <button
             onClick={handleResetSettings}
             className={`w-full py-3 rounded-2xl font-extrabold text-xs flex items-center justify-center gap-2 border transition-all active:scale-95 ${softPanel}`}
           >
-            <RotateCcw className="w-4 h-4 text-amber-500" /> Restore Default
-            Settings Only
+            <RotateCcw className="w-4 h-4 text-amber-500" /> Restore Default Settings
           </button>
           <button
             onClick={handleFactoryReset}
@@ -1354,8 +1313,8 @@ export default function SettingsScreen({
           >
             <Trash2 className="w-4 h-4" />{" "}
             {confirmReset
-              ? "Confirm Factory Reset"
-              : "Factory Reset Local App Data"}
+              ? "Confirm Reset"
+              : "Reset All App Data"}
           </button>
         </section>
 
@@ -1366,9 +1325,7 @@ export default function SettingsScreen({
             <h3 className="font-extrabold text-base">Brand & Public Release</h3>
           </div>
           <p className={`text-xs leading-relaxed ${mutedText}`}>
-            NoorQuran now has a cleaner public identity, improved install icon,
-            stronger metadata for sharing, and a more professional app name
-            across mobile and browser installs.
+            NoorQuran is ready for public visitors with a clean app identity, reliable install experience, and professional sharing information.
           </p>
           <div className="grid grid-cols-2 gap-3">
             <div className={`rounded-2xl border p-3 ${softPanel}`}>
@@ -1393,7 +1350,7 @@ export default function SettingsScreen({
           <div className={`rounded-2xl border p-4 ${softPanel}`}>
             <p className="text-sm font-extrabold">Public description</p>
             <p className={`mt-1 text-xs leading-relaxed ${mutedText}`}>
-              NoorQuran is a private Islamic companion app for Quran reading,
+              NoorQuran is a free Islamic companion app for Quran reading,
               audio recitations, Salah times, Adhkar, Duas, Tasbih, Qibla,
               reminders, and offline reading.
             </p>
@@ -1412,7 +1369,7 @@ export default function SettingsScreen({
           </p>
 
           <div className={`rounded-2xl border p-4 ${softPanel}`}>
-            <p className="text-sm font-extrabold">Public app link</p>
+            <p className="text-sm font-extrabold">App link</p>
             <p className={`mt-1 break-all text-xs font-semibold ${mutedText}`}>
               {NOORQURAN_PUBLIC_URL}
             </p>
@@ -1468,8 +1425,7 @@ export default function SettingsScreen({
             <h3 className="font-extrabold text-base">Trust, Sources & Review</h3>
           </div>
           <p className={`text-xs leading-relaxed ${mutedText}`}>
-            NoorQuran should be transparent about where content comes from and
-            what still needs human review before wide public sharing.
+            NoorQuran keeps source and review notes clear so public visitors understand how to use the app responsibly.
           </p>
 
           <div className="space-y-2">
@@ -1504,7 +1460,7 @@ export default function SettingsScreen({
 
           <div className={`rounded-2xl border p-3 ${softPanel}`}>
             <p className="text-xs font-extrabold uppercase tracking-wider text-emerald-500">
-              Before Public Marketing
+              Quality Review
             </p>
             <div className="mt-3 space-y-2">
               {REVIEW_CHECKLIST.map((item) => (
@@ -1542,8 +1498,7 @@ export default function SettingsScreen({
             <h3 className="font-extrabold text-base">Support & Feedback</h3>
           </div>
           <p className={`text-xs leading-relaxed ${mutedText}`}>
-            Use this section as your public support note until you connect a
-            dedicated support email or contact form.
+            Use this section to guide corrections and feedback from public visitors.
           </p>
           <div className={`rounded-2xl border p-4 ${softPanel}`}>
             <p className="text-sm font-extrabold">Report a correction</p>
@@ -1551,14 +1506,14 @@ export default function SettingsScreen({
               If you notice a mistake in Arabic text, translation, source label,
               audio, prayer time, or app behavior, record the page name, Surah or
               dua name, device type, and screenshot before reporting it to the
-              app owner.
+              support team.
             </p>
           </div>
           <div className={`rounded-2xl border p-4 ${softPanel}`}>
             <p className="text-sm font-extrabold">Data removal</p>
             <p className={`mt-1 text-xs leading-relaxed ${mutedText}`}>
               You can remove local app data anytime from Storage Management by
-              clearing offline caches or using Factory Reset Local App Data.
+              clearing offline caches or using Reset All App Data.
             </p>
           </div>
         </section>
@@ -1570,7 +1525,7 @@ export default function SettingsScreen({
           <p
             className={`text-xs max-w-xs mx-auto leading-relaxed ${mutedText}`}
           >
-            NoorQuran is built as a clean Islamic companion with no ads, no
+            NoorQuran is a clean Islamic companion with no ads, no
             paywalls, and no unnecessary tracking. Made with{" "}
             <Heart className="w-3.5 h-3.5 inline text-red-500 fill-current" />{" "}
             for beneficial use.

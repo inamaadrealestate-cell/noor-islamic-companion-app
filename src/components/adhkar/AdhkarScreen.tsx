@@ -25,7 +25,7 @@ import {
   Utensils,
 } from 'lucide-react';
 import { ADHKAR_CATEGORIES, DUAS_LIST, type DhikrCategory, type DhikrItem, type DuaItem } from '../../lib/adhkarData';
-import { Storage } from '../../lib/supabase';
+import { Storage } from '../../lib/storage';
 import { getAdhkarReminderSettings, requestPrayerNotificationPermission, saveAdhkarReminderSettings, type NoorAdhkarReminderSettings } from '../../lib/pwa';
 
 interface AdhkarScreenProps {
