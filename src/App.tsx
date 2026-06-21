@@ -7,11 +7,12 @@ import AdhkarScreen from "./components/adhkar/AdhkarScreen";
 import QiblaCompass from "./components/qibla/QiblaCompass";
 import PrayerScreen from "./components/prayer/PrayerScreen";
 import SettingsScreen from "./components/settings/SettingsScreen";
+import TasbihScreen from "./components/tasbih/TasbihScreen";
 import { Storage, UserSettings } from "./lib/supabase";
 
-type AppTab = "home" | "quran" | "prayer" | "adhkar" | "qibla" | "settings";
+type AppTab = "home" | "quran" | "prayer" | "adhkar" | "tasbih" | "qibla" | "settings";
 
-const VALID_TABS: AppTab[] = ["home", "quran", "prayer", "adhkar", "qibla", "settings"];
+const VALID_TABS: AppTab[] = ["home", "quran", "prayer", "adhkar", "tasbih", "qibla", "settings"];
 const LAST_TAB_KEY = "noor_active_tab";
 
 function isValidTab(tab: string | null): tab is AppTab {
@@ -284,6 +285,8 @@ export default function App() {
           )}
 
           {activeTab === "adhkar" && <AdhkarScreen isLightMode={isLightMode} />}
+
+          {activeTab === "tasbih" && <TasbihScreen isLightMode={isLightMode} />}
 
           {activeTab === "qibla" && <QiblaCompass />}
 
