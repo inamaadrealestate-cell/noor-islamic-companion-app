@@ -1,0 +1,32 @@
+Google Play Data Safety draft for NoorQuran
+
+This is a draft to help fill Play Console accurately. Confirm everything before submission.
+
+Account required: No
+Data sold: No
+Data shared for advertising: No
+Login required: No
+
+Possible data/permissions/features:
+1. Approximate/precise location
+   - Purpose: App functionality only
+   - Used for Salah times and Qibla direction
+   - User can deny permission and use city search
+
+2. Notifications
+   - Purpose: App functionality only
+   - Used for optional prayer/Adhkar reminders
+
+3. Local app activity/preferences
+   - Stored locally on device where possible
+   - Includes bookmarks, notes, settings, reminder preferences, offline cache
+
+4. Network requests to content services
+   - Quran text/translation/audio/prayer time content may be loaded from external services
+   - No account data is required by NoorQuran
+
+Suggested privacy policy URL:
+https://noorquran-eight.vercel.app/privacy.html
+
+Important:
+The Play Console form must match the real app behavior. If new analytics, ads, accounts, payments, crash reporting, or cloud sync are added later, this data safety draft must be updated.

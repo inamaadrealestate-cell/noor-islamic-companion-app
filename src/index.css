@@ -146,3 +146,230 @@ textarea {
     bottom: calc(var(--noor-nav-height, 4.25rem) + var(--noor-audio-height, 4.5rem) + env(safe-area-inset-bottom) + 0.5rem);
   }
 }
+
+/* NoorQuran mobile small-font upgrade
+   Slightly increases phone fonts while keeping compact one-line controls. */
+@media (max-width: 480px) {
+  html {
+    font-size: 14.6px;
+  }
+
+  body {
+    font-size: 0.96rem;
+  }
+
+  h1,
+  .text-3xl,
+  .text-4xl,
+  .text-5xl,
+  .text-6xl {
+    letter-spacing: -0.035em;
+  }
+
+  .text-xs {
+    font-size: 0.78rem !important;
+    line-height: 1.05rem !important;
+  }
+
+  .text-sm {
+    font-size: 0.88rem !important;
+    line-height: 1.25rem !important;
+  }
+
+  .text-base {
+    font-size: 0.98rem !important;
+    line-height: 1.42rem !important;
+  }
+
+  .text-lg {
+    font-size: 1.08rem !important;
+    line-height: 1.5rem !important;
+  }
+
+  .text-xl {
+    font-size: 1.18rem !important;
+    line-height: 1.62rem !important;
+  }
+
+  .text-2xl {
+    font-size: 1.38rem !important;
+    line-height: 1.82rem !important;
+  }
+
+  .text-3xl {
+    font-size: 1.65rem !important;
+    line-height: 2.05rem !important;
+  }
+
+  .text-4xl,
+  .text-5xl,
+  .text-6xl {
+    font-size: 2.08rem !important;
+    line-height: 2.32rem !important;
+  }
+
+  .font-quran {
+    font-size: clamp(1.55rem, 6.2vw, 2rem) !important;
+    line-height: 2.08 !important;
+  }
+
+  .font-arabic {
+    font-size: clamp(1.08rem, 4.6vw, 1.42rem) !important;
+    line-height: 1.92 !important;
+  }
+
+  nav span {
+    font-size: 0.7rem !important;
+    line-height: 0.88rem !important;
+  }
+
+  nav button {
+    min-width: 0;
+  }
+
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+
+  button,
+  a {
+    line-height: 1.15;
+  }
+}
+
+@media (max-width: 390px) {
+  html {
+    font-size: 14.1px;
+  }
+
+  .max-w-lg {
+    max-width: 100% !important;
+  }
+
+  .text-2xl {
+    font-size: 1.32rem !important;
+    line-height: 1.72rem !important;
+  }
+
+  .text-3xl {
+    font-size: 1.54rem !important;
+    line-height: 1.9rem !important;
+  }
+
+  .text-4xl,
+  .text-5xl,
+  .text-6xl {
+    font-size: 1.9rem !important;
+    line-height: 2.18rem !important;
+  }
+
+  .font-quran {
+    font-size: clamp(1.42rem, 6vw, 1.85rem) !important;
+  }
+
+  nav span {
+    font-size: 0.66rem !important;
+  }
+}
+
+@media (max-width: 340px) {
+  html {
+    font-size: 13.5px;
+  }
+
+  .text-xs {
+    font-size: 0.72rem !important;
+  }
+
+  .text-sm {
+    font-size: 0.82rem !important;
+  }
+
+  .text-base {
+    font-size: 0.92rem !important;
+  }
+
+  .font-quran {
+    font-size: clamp(1.28rem, 6vw, 1.65rem) !important;
+  }
+}
+
+/* NoorQuran requested mobile one-line button fix
+   Keeps short action labels like Use My Location, Search City, Dark Mode,
+   Abuja, Lagos, Kano, Kaduna, and similar compact buttons on one line. */
+@media (max-width: 480px) {
+  button,
+  a[role="button"],
+  .noor-one-line,
+  .noor-one-line * {
+    white-space: nowrap !important;
+    text-wrap: nowrap !important;
+  }
+
+  button span,
+  button p,
+  button div,
+  a[role="button"] span,
+  a[role="button"] p,
+  a[role="button"] div {
+    white-space: nowrap !important;
+    text-wrap: nowrap !important;
+  }
+
+  button br,
+  a[role="button"] br {
+    display: none !important;
+  }
+
+  button {
+    min-width: 0 !important;
+    max-width: 100%;
+  }
+
+  button svg,
+  a[role="button"] svg {
+    flex-shrink: 0;
+  }
+
+  .grid button,
+  .flex button {
+    overflow: hidden;
+  }
+
+  .grid button span,
+  .grid button p,
+  .flex button span,
+  .flex button p {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  button .font-bold,
+  button .font-extrabold,
+  button .font-black {
+    letter-spacing: -0.02em !important;
+  }
+}
+
+@media (max-width: 480px) {
+  button,
+  a[role="button"] {
+    font-size: clamp(0.74rem, 2.75vw, 0.88rem) !important;
+    line-height: 1rem !important;
+  }
+}
+
+@media (max-width: 380px) {
+  button,
+  a[role="button"] {
+    font-size: 0.72rem !important;
+    line-height: 0.98rem !important;
+  }
+
+  nav button {
+    font-size: 0.64rem !important;
+  }
+}
+

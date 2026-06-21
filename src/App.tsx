@@ -1,4 +1,5 @@
 import { Component, ReactNode, useEffect, useState } from "react";
+import { Download } from "lucide-react";
 import Navigation from "./components/Navigation";
 import AudioPlayer from "./components/AudioPlayer";
 import HomeScreen from "./components/home/HomeScreen";
@@ -28,6 +29,18 @@ function getInitialTab(): AppTab {
 function getInitialOnlineState(): boolean {
   if (typeof navigator === "undefined") return true;
   return navigator.onLine;
+}
+
+function isRunningAsInstalledApp(): boolean {
+  if (typeof window === "undefined") return false;
+
+  const standaloneDisplay = window.matchMedia?.("(display-mode: standalone)").matches ?? false;
+  const fullscreenDisplay = window.matchMedia?.("(display-mode: fullscreen)").matches ?? false;
+  const iosStandalone = Boolean(
+    (window.navigator as Navigator & { standalone?: boolean }).standalone,
+  );
+
+  return standaloneDisplay || fullscreenDisplay || iosStandalone;
 }
 
 interface AppErrorBoundaryProps {
@@ -117,6 +130,8 @@ export default function App() {
   const [isOnline, setIsOnline] = useState<boolean>(getInitialOnlineState);
   const [showOnlineRestored, setShowOnlineRestored] = useState<boolean>(false);
   const [updateAvailable, setUpdateAvailable] = useState<boolean>(false);
+  const [showInstallButton, setShowInstallButton] = useState<boolean>(false);
+  const [installHint, setInstallHint] = useState<string>("");
 
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [currentSurah, setCurrentSurah] = useState<number>(1);
@@ -163,6 +178,28 @@ export default function App() {
     return () => window.removeEventListener("noor-update-available", handleUpdateAvailable);
   }, []);
 
+  useEffect(() => {
+    const updateInstallButtonVisibility = () => {
+      setShowInstallButton(!isRunningAsInstalledApp());
+    };
+
+    const handleInstallPromptReady = () => updateInstallButtonVisibility();
+    const handleAppInstalled = () => {
+      setShowInstallButton(false);
+      setInstallHint("");
+    };
+
+    updateInstallButtonVisibility();
+
+    window.addEventListener("beforeinstallprompt", handleInstallPromptReady);
+    window.addEventListener("appinstalled", handleAppInstalled);
+
+    return () => {
+      window.removeEventListener("beforeinstallprompt", handleInstallPromptReady);
+      window.removeEventListener("appinstalled", handleAppInstalled);
+    };
+  }, []);
+
   const setActiveTab = (tab: string) => {
     if (isValidTab(tab)) {
       setActiveTabState(tab);
@@ -196,6 +233,28 @@ export default function App() {
       return;
     }
     window.location.reload();
+  };
+
+  const handleInstallApp = async () => {
+    setInstallHint("");
+
+    if (window.noorPromptInstall && window.noorDeferredInstallPrompt) {
+      await window.noorPromptInstall();
+
+      window.setTimeout(() => {
+        if (isRunningAsInstalledApp()) {
+          setShowInstallButton(false);
+          return;
+        }
+
+        setInstallHint("Tap menu, then Install app");
+        window.setTimeout(() => setInstallHint(""), 4200);
+      }, 800);
+      return;
+    }
+
+    setInstallHint("Tap menu, then Install app");
+    window.setTimeout(() => setInstallHint(""), 4200);
   };
 
   return (
@@ -249,6 +308,39 @@ export default function App() {
                 Update
               </button>
             </div>
+          </div>
+        )}
+
+        {showInstallButton && (
+          <div className="fixed right-2 top-1/2 z-[65] -translate-y-1/2 sm:right-4">
+            <button
+              type="button"
+              onClick={handleInstallApp}
+              aria-label="Download NoorQuran app"
+              title="Download NoorQuran app"
+              className={`group relative flex h-11 w-11 items-center justify-center overflow-visible rounded-2xl border shadow-2xl active:scale-95 ${
+                isLightMode
+                  ? "border-emerald-200 bg-white text-emerald-700 shadow-emerald-900/15"
+                  : "border-emerald-500/40 bg-slate-900 text-emerald-300 shadow-emerald-950/40"
+              }`}
+            >
+              <span className="absolute -inset-1 rounded-[1.15rem] bg-emerald-400/25 blur-md transition-opacity group-hover:opacity-100" />
+              <span className="relative flex h-full w-full animate-bounce items-center justify-center rounded-2xl bg-emerald-600 text-white">
+                <Download className="h-5 w-5" strokeWidth={2.7} />
+              </span>
+            </button>
+
+            {installHint && (
+              <div
+                className={`absolute right-12 top-1/2 w-max max-w-[11rem] -translate-y-1/2 rounded-2xl border px-3 py-2 text-[10px] font-extrabold shadow-xl ${
+                  isLightMode
+                    ? "border-slate-200 bg-white text-slate-700"
+                    : "border-slate-700 bg-slate-900 text-slate-100"
+                }`}
+              >
+                {installHint}
+              </div>
+            )}
           </div>
         )}
 

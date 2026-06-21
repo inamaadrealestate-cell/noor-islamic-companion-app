@@ -1,0 +1,38 @@
+APP NAME
+NoorQuran
+
+SHORT DESCRIPTION (80 characters max)
+Quran, Salah, Qibla, Adhkar, Duas, Tasbih and reminders in one app.
+
+FULL DESCRIPTION
+NoorQuran is a free Islamic companion app built for daily worship and spiritual organization.
+
+Features include:
+• Quran reading with translations
+• Quran audio recitations from multiple reciters
+• Bookmarks and personal notes
+• Offline Quran reading support
+• Salah prayer times and monthly timetable
+• Qibla direction finder
+• Morning and evening Adhkar
+• Daily Duas
+• Tasbih counter
+• Reminder notifications
+• Light and dark mode
+• Installable mobile app experience
+
+NoorQuran is designed for clean, simple, public access. No account is required.
+
+Important note: Users should verify religious content and timing settings according to their local scholar, masjid, or trusted authority where required.
+
+PRIVACY POLICY URL
+https://noorquran-eight.vercel.app/privacy.html
+
+SUPPORT URL
+https://noorquran-eight.vercel.app/support.html
+
+CATEGORY SUGGESTION
+Lifestyle / Books & Reference
+
+CONTENT RATING NOTES
+No violence, no gambling, no adult content. Religious / educational Islamic content.

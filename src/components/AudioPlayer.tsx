@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertCircle,
   Check,
@@ -8,7 +8,6 @@ import {
   Loader2,
   Pause,
   Play,
-  RefreshCw,
   Repeat,
   Search,
   Settings2,
@@ -16,17 +15,15 @@ import {
   SkipBack,
   SkipForward,
   Volume2,
-  WifiOff,
-} from "lucide-react";
+} from 'lucide-react';
 import {
   AUDIO_CACHE_NAME,
   RECITERS_LIST,
   getAudioDownloadKey,
   getReciterById,
-  getVerseAudioFallbackUrls,
   getVerseAudioUrl,
-} from "../lib/audioData";
-import { SURAH_LIST } from "../lib/surahData";
+} from '../lib/audioData';
+import { SURAH_LIST } from '../lib/surahData';
 
 interface AudioPlayerProps {
   currentSurah: number;
@@ -39,26 +36,17 @@ interface AudioPlayerProps {
   isLightMode: boolean;
 }
 
-type RepeatMode = "off" | "ayah" | "surah";
-type ReciterFilter = "all" | "favorites" | "murattal" | "mujawwad";
-type DownloadToastKind = "saving" | "saved" | "error";
+type RepeatMode = 'off' | 'ayah' | 'surah';
+type ReciterFilter = 'all' | 'favorites' | 'murattal' | 'mujawwad';
 
-interface DownloadToastState {
-  visible: boolean;
-  message: string;
-  kind: DownloadToastKind;
-}
-
-const FAVORITE_RECITERS_KEY = "noor_favorite_reciters";
+const FAVORITE_RECITERS_KEY = 'noor_favorite_reciters';
 
 function loadFavoriteReciters(): string[] {
   try {
     const raw = localStorage.getItem(FAVORITE_RECITERS_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed)
-      ? parsed.filter((item) => typeof item === "string")
-      : [];
+    return Array.isArray(parsed) ? parsed.filter((item) => typeof item === 'string') : [];
   } catch {
     return [];
   }
@@ -82,36 +70,25 @@ interface LatestPlaybackState {
 }
 
 function formatTime(seconds: number): string {
-  if (!Number.isFinite(seconds) || seconds <= 0) return "0:00";
+  if (!Number.isFinite(seconds) || seconds <= 0) return '0:00';
   const minutes = Math.floor(seconds / 60);
-  const remainingSeconds = Math.floor(seconds % 60)
-    .toString()
-    .padStart(2, "0");
+  const remainingSeconds = Math.floor(seconds % 60).toString().padStart(2, '0');
   return `${minutes}:${remainingSeconds}`;
 }
 
 function getSurahMeta(surahNumber: number) {
-  return (
-    SURAH_LIST.find((surah) => surah.number === surahNumber) || SURAH_LIST[0]
-  );
+  return SURAH_LIST.find((surah) => surah.number === surahNumber) || SURAH_LIST[0];
 }
 
-function getPreviousVerse(
-  surah: number,
-  ayah: number,
-): { surah: number; ayah: number } {
+function getPreviousVerse(surah: number, ayah: number): { surah: number; ayah: number } {
   if (ayah > 1) return { surah, ayah: ayah - 1 };
 
   const currentIndex = SURAH_LIST.findIndex((item) => item.number === surah);
-  const previousSurah =
-    currentIndex > 0 ? SURAH_LIST[currentIndex - 1] : SURAH_LIST[0];
+  const previousSurah = currentIndex > 0 ? SURAH_LIST[currentIndex - 1] : SURAH_LIST[0];
   return { surah: previousSurah.number, ayah: previousSurah.numberOfAyahs };
 }
 
-function getNextVerse(
-  surah: number,
-  ayah: number,
-): { surah: number; ayah: number } | null {
+function getNextVerse(surah: number, ayah: number): { surah: number; ayah: number } | null {
   const surahMeta = getSurahMeta(surah);
   if (ayah < surahMeta.numberOfAyahs) return { surah, ayah: ayah + 1 };
 
@@ -132,33 +109,21 @@ export default function AudioPlayer({
 }: AudioPlayerProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [playbackSpeed, setPlaybackSpeed] = useState<number>(1);
-  const [repeatMode, setRepeatMode] = useState<RepeatMode>("off");
+  const [repeatMode, setRepeatMode] = useState<RepeatMode>('off');
   const [downloaded, setDownloaded] = useState<boolean>(false);
   const [showReciterPicker, setShowReciterPicker] = useState(false);
-  const [reciterSearch, setReciterSearch] = useState("");
-  const [reciterFilter, setReciterFilter] = useState<ReciterFilter>("all");
-  const [favoriteReciterIds, setFavoriteReciterIds] =
-    useState<string[]>(loadFavoriteReciters);
+  const [reciterSearch, setReciterSearch] = useState('');
+  const [reciterFilter, setReciterFilter] = useState<ReciterFilter>('all');
+  const [favoriteReciterIds, setFavoriteReciterIds] = useState<string[]>(loadFavoriteReciters);
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
   const [isBuffering, setIsBuffering] = useState(false);
-  const [playerError, setPlayerError] = useState("");
-  const [cacheStatus, setCacheStatus] = useState("");
+  const [playerError, setPlayerError] = useState('');
+  const [cacheStatus, setCacheStatus] = useState('');
   const [volume, setVolume] = useState<number>(0.9);
-  const [effectiveAudioUrl, setEffectiveAudioUrl] = useState("");
-  const [audioRetryNonce, setAudioRetryNonce] = useState(0);
-  const [audioSourceIndex, setAudioSourceIndex] = useState(0);
-  const [isOnline, setIsOnline] = useState(() =>
-    typeof navigator === "undefined" ? true : navigator.onLine,
-  );
-  const [downloadToast, setDownloadToast] = useState<DownloadToastState>({
-    visible: false,
-    message: "",
-    kind: "saving",
-  });
+  const [effectiveAudioUrl, setEffectiveAudioUrl] = useState('');
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const downloadToastTimerRef = useRef<number | null>(null);
   const objectUrlRef = useRef<string | null>(null);
   const shouldAutoContinueRef = useRef(false);
   const latestRef = useRef<LatestPlaybackState>({
@@ -170,26 +135,22 @@ export default function AudioPlayer({
 
   const surahMeta = useMemo(() => getSurahMeta(currentSurah), [currentSurah]);
   const activeReciter = useMemo(() => getReciterById(reciterId), [reciterId]);
-  const favoriteReciterSet = useMemo(
-    () => new Set(favoriteReciterIds),
-    [favoriteReciterIds],
-  );
+  const favoriteReciterSet = useMemo(() => new Set(favoriteReciterIds), [favoriteReciterIds]);
   const filteredReciters = useMemo(() => {
     const query = normalizeSearch(reciterSearch);
 
     return RECITERS_LIST.filter((reciter) => {
-      const matchesQuery =
-        !query ||
+      const matchesQuery = !query ||
         reciter.name.toLowerCase().includes(query) ||
         reciter.arabicName.includes(reciterSearch.trim()) ||
         reciter.description.toLowerCase().includes(query) ||
         reciter.bitrate.toLowerCase().includes(query);
 
       const matchesFilter =
-        reciterFilter === "all" ||
-        (reciterFilter === "favorites" && favoriteReciterSet.has(reciter.id)) ||
-        (reciterFilter === "murattal" && reciter.style === "Murattal") ||
-        (reciterFilter === "mujawwad" && reciter.style === "Mujawwad");
+        reciterFilter === 'all' ||
+        (reciterFilter === 'favorites' && favoriteReciterSet.has(reciter.id)) ||
+        (reciterFilter === 'murattal' && reciter.style === 'Murattal') ||
+        (reciterFilter === 'mujawwad' && reciter.style === 'Mujawwad');
 
       return matchesQuery && matchesFilter;
     }).sort((a, b) => {
@@ -199,18 +160,10 @@ export default function AudioPlayer({
       return a.name.localeCompare(b.name);
     });
   }, [favoriteReciterSet, reciterFilter, reciterSearch]);
-  const audioSources = useMemo(
-    () => getVerseAudioFallbackUrls(reciterId, currentSurah, currentAyah),
+  const audioUrl = useMemo(
+    () => getVerseAudioUrl(reciterId, currentSurah, currentAyah),
     [reciterId, currentSurah, currentAyah],
   );
-  const selectedAudioSource =
-    audioSources[Math.min(audioSourceIndex, Math.max(0, audioSources.length - 1))] ||
-    audioSources[0];
-  const baseAudioUrl = selectedAudioSource?.url || getVerseAudioUrl(reciterId, currentSurah, currentAyah);
-  const audioUrl = useMemo(() => {
-    if (!audioRetryNonce) return baseAudioUrl;
-    return `${baseAudioUrl}${baseAudioUrl.includes("?") ? "&" : "?"}noorRetry=${audioRetryNonce}`;
-  }, [audioRetryNonce, baseAudioUrl]);
   const downloadKey = useMemo(
     () => getAudioDownloadKey(reciterId, currentSurah, currentAyah),
     [reciterId, currentSurah, currentAyah],
@@ -218,18 +171,18 @@ export default function AudioPlayer({
 
   const playAudioElement = (
     audio: HTMLAudioElement,
-    blockedMessage = "Tap play again. Your browser blocked automatic audio playback.",
+    blockedMessage = 'Tap play again. Your browser blocked automatic audio playback.',
   ) => {
     setIsBuffering(true);
 
     const playPromise = audio.play();
 
-    if (playPromise && typeof playPromise.then === "function") {
+    if (playPromise && typeof playPromise.then === 'function') {
       playPromise
         .then(() => {
           shouldAutoContinueRef.current = false;
           setIsBuffering(false);
-          setPlayerError("");
+          setPlayerError('');
         })
         .catch((error: any) => {
           setIsBuffering(false);
@@ -237,52 +190,24 @@ export default function AudioPlayer({
           // Chrome/Edge can throw AbortError when a source is replaced while a play()
           // request is still settling. That is not a real audio failure, so do not
           // stop the player or show the user a scary error.
-          if (error?.name === "AbortError") {
+          if (error?.name === 'AbortError') {
             return;
           }
 
           shouldAutoContinueRef.current = false;
-          setPlayerError(
-            error?.name === "NotAllowedError"
-              ? blockedMessage
-              : "Audio playback was interrupted. Tap play once to continue.",
-          );
+          setPlayerError(error?.name === 'NotAllowedError' ? blockedMessage : 'Audio playback was interrupted. Tap play once to continue.');
           onPlayStateChange(false);
         });
     }
   };
 
   const cardBase = isLightMode
-    ? "bg-white border-slate-200 text-slate-800 shadow-sm"
-    : "bg-slate-800/70 border-slate-700/80 text-white shadow-xl shadow-slate-950/20";
-  const mutedText = isLightMode ? "text-slate-500" : "text-slate-400";
+    ? 'bg-white border-slate-200 text-slate-800 shadow-sm'
+    : 'bg-slate-800/70 border-slate-700/80 text-white shadow-xl shadow-slate-950/20';
+  const mutedText = isLightMode ? 'text-slate-500' : 'text-slate-400';
   const softButton = isLightMode
-    ? "bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200"
-    : "bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700";
-
-  useEffect(() => {
-    const handleOnline = () => setIsOnline(true);
-    const handleOffline = () => setIsOnline(false);
-    window.addEventListener("online", handleOnline);
-    window.addEventListener("offline", handleOffline);
-    return () => {
-      window.removeEventListener("online", handleOnline);
-      window.removeEventListener("offline", handleOffline);
-    };
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      if (downloadToastTimerRef.current) {
-        window.clearTimeout(downloadToastTimerRef.current);
-      }
-    };
-  }, []);
-
-  useEffect(() => {
-    setAudioSourceIndex(0);
-    setAudioRetryNonce(0);
-  }, [reciterId, currentSurah, currentAyah]);
+    ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
+    : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700';
 
   useEffect(() => {
     latestRef.current = {
@@ -296,8 +221,8 @@ export default function AudioPlayer({
   useEffect(() => {
     let cancelled = false;
     setEffectiveAudioUrl(audioUrl);
-    setCacheStatus("");
-    setDownloaded(localStorage.getItem(downloadKey) === "cached");
+    setCacheStatus('');
+    setDownloaded(localStorage.getItem(downloadKey) === 'cached');
 
     if (objectUrlRef.current) {
       URL.revokeObjectURL(objectUrlRef.current);
@@ -305,15 +230,15 @@ export default function AudioPlayer({
     }
 
     async function loadCachedAudio() {
-      if (!("caches" in window)) return;
+      if (!('caches' in window)) return;
 
       try {
         const cache = await caches.open(AUDIO_CACHE_NAME);
-        const cachedResponse = await cache.match(baseAudioUrl);
+        const cachedResponse = await cache.match(audioUrl);
         if (!cachedResponse || cancelled) return;
 
         setDownloaded(true);
-        localStorage.setItem(downloadKey, "cached");
+        localStorage.setItem(downloadKey, 'cached');
 
         const blob = await cachedResponse.blob();
         if (blob.size > 0 && !cancelled) {
@@ -335,14 +260,15 @@ export default function AudioPlayer({
         objectUrlRef.current = null;
       }
     };
-  }, [audioUrl, baseAudioUrl, downloadKey]);
+  }, [audioUrl, downloadKey]);
 
   useEffect(() => {
     if (!effectiveAudioUrl) return;
 
     const audio = audioRef.current || new Audio();
     audioRef.current = audio;
-    audio.preload = "auto";
+    audio.preload = 'auto';
+    audio.crossOrigin = 'anonymous';
     audio.src = effectiveAudioUrl;
     audio.playbackRate = playbackSpeed;
     audio.volume = volume;
@@ -351,7 +277,7 @@ export default function AudioPlayer({
 
     setCurrentTime(0);
     setDuration(0);
-    setPlayerError("");
+    setPlayerError('');
     setIsBuffering(shouldStartForThisSource);
 
     let startedForThisSource = false;
@@ -360,10 +286,7 @@ export default function AudioPlayer({
       if (startedForThisSource || !shouldStartForThisSource) return;
       startedForThisSource = true;
       audio.currentTime = 0;
-      playAudioElement(
-        audio,
-        "Could not continue automatically. Tap play once to unlock audio, then continuous recitation will continue.",
-      );
+      playAudioElement(audio, 'Could not continue automatically. Tap play once to unlock audio, then continuous recitation will continue.');
     };
 
     const handleLoadedMetadata = () => {
@@ -384,27 +307,21 @@ export default function AudioPlayer({
     const handleWaiting = () => setIsBuffering(true);
     const handlePlaying = () => {
       setIsBuffering(false);
-      setPlayerError("");
+      setPlayerError('');
     };
 
     const handleEnded = () => {
       const latest = latestRef.current;
 
-      if (latest.repeatMode === "ayah") {
+      if (latest.repeatMode === 'ayah') {
         audio.currentTime = 0;
         shouldAutoContinueRef.current = true;
         onPlayStateChange(true);
-        playAudioElement(
-          audio,
-          "Could not repeat this ayah automatically. Tap play once to continue.",
-        );
+        playAudioElement(audio, 'Could not repeat this ayah automatically. Tap play once to continue.');
         return;
       }
 
-      if (
-        latest.repeatMode === "surah" &&
-        latest.currentAyah >= latest.surahAyahs
-      ) {
+      if (latest.repeatMode === 'surah' && latest.currentAyah >= latest.surahAyahs) {
         shouldAutoContinueRef.current = true;
         onPlayStateChange(true);
         onVerseChange(latest.currentSurah, 1);
@@ -425,49 +342,33 @@ export default function AudioPlayer({
 
     const handleError = () => {
       setIsBuffering(false);
-
-      const nextSourceIndex = audioSourceIndex + 1;
-      if (navigator.onLine && nextSourceIndex < audioSources.length) {
-        const nextSource = audioSources[nextSourceIndex];
-        setPlayerError(
-          `${activeReciter.name} could not load this ayah. Trying verified backup audio from ${nextSource.reciterName}...`,
-        );
-        shouldAutoContinueRef.current = true;
-        onPlayStateChange(true);
-        setAudioSourceIndex(nextSourceIndex);
-        return;
-      }
-
-      setPlayerError(
-        navigator.onLine
-          ? "Audio could not load after trying verified backup sources. Try Retry once, then change reciter."
-          : "You are offline and this ayah is not saved for offline audio yet. Connect once or choose an ayah you already saved.",
-      );
+      setPlayerError('Audio could not load from this reciter. Try another reciter or press Ctrl + F5 to clear old cached files.');
       onPlayStateChange(false);
     };
 
-    audio.addEventListener("loadedmetadata", handleLoadedMetadata);
-    audio.addEventListener("canplay", handleCanPlay);
-    audio.addEventListener("timeupdate", handleTimeUpdate);
-    audio.addEventListener("waiting", handleWaiting);
-    audio.addEventListener("playing", handlePlaying);
-    audio.addEventListener("ended", handleEnded);
-    audio.addEventListener("error", handleError);
+    audio.addEventListener('loadedmetadata', handleLoadedMetadata);
+    audio.addEventListener('canplay', handleCanPlay);
+    audio.addEventListener('timeupdate', handleTimeUpdate);
+    audio.addEventListener('waiting', handleWaiting);
+    audio.addEventListener('playing', handlePlaying);
+    audio.addEventListener('ended', handleEnded);
+    audio.addEventListener('error', handleError);
 
     audio.load();
     tryStartForThisSource();
 
     return () => {
       audio.pause();
-      audio.removeEventListener("loadedmetadata", handleLoadedMetadata);
-      audio.removeEventListener("canplay", handleCanPlay);
-      audio.removeEventListener("timeupdate", handleTimeUpdate);
-      audio.removeEventListener("waiting", handleWaiting);
-      audio.removeEventListener("playing", handlePlaying);
-      audio.removeEventListener("ended", handleEnded);
-      audio.removeEventListener("error", handleError);
+      audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
+      audio.removeEventListener('canplay', handleCanPlay);
+      audio.removeEventListener('timeupdate', handleTimeUpdate);
+      audio.removeEventListener('waiting', handleWaiting);
+      audio.removeEventListener('playing', handlePlaying);
+      audio.removeEventListener('ended', handleEnded);
+      audio.removeEventListener('error', handleError);
     };
-  }, [effectiveAudioUrl, audioSourceIndex, audioSources, activeReciter.name]);
+  }, [effectiveAudioUrl]);
+
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -486,7 +387,7 @@ export default function AudioPlayer({
     if (!audio) return;
 
     if (isPlaying) {
-      playAudioElement(audio, "Tap play again once to unlock audio playback.");
+      playAudioElement(audio, 'Tap play again once to unlock audio playback.');
     } else {
       audio.pause();
       shouldAutoContinueRef.current = false;
@@ -507,7 +408,7 @@ export default function AudioPlayer({
     // real user gesture, not later inside a React effect.
     onPlayStateChange(true);
     if (audio) {
-      playAudioElement(audio, "Tap play again once to unlock audio playback.");
+      playAudioElement(audio, 'Tap play again once to unlock audio playback.');
     }
   };
 
@@ -532,9 +433,7 @@ export default function AudioPlayer({
   };
 
   const toggleRepeat = () => {
-    setRepeatMode((previous) =>
-      previous === "off" ? "ayah" : previous === "ayah" ? "surah" : "off",
-    );
+    setRepeatMode((previous) => (previous === 'off' ? 'ayah' : previous === 'ayah' ? 'surah' : 'off'));
   };
 
   const handleSeek = (value: string) => {
@@ -553,47 +452,21 @@ export default function AudioPlayer({
     });
   };
 
-  const showDownloadToast = (message: string, kind: DownloadToastKind = "saving") => {
-    if (downloadToastTimerRef.current) {
-      window.clearTimeout(downloadToastTimerRef.current);
-    }
-
-    setDownloadToast({ visible: true, message, kind });
-    downloadToastTimerRef.current = window.setTimeout(() => {
-      setDownloadToast((current) => ({ ...current, visible: false }));
-      downloadToastTimerRef.current = null;
-    }, kind === "saving" ? 1800 : 3200);
-  };
-
-  const handleRetryAudio = () => {
-    setPlayerError("");
-    setCacheStatus("Retrying audio source...");
-    setIsBuffering(true);
-    shouldAutoContinueRef.current = true;
-    onPlayStateChange(true);
-    setAudioSourceIndex(0);
-    setAudioRetryNonce((value) => value + 1);
-    window.setTimeout(() => setCacheStatus(""), 2500);
-  };
-
   const handleCacheCurrentAyah = async () => {
-    showDownloadToast("Saving ayah audio...", "saving");
-    setCacheStatus("Saving current ayah audio...");
+    setCacheStatus('Saving current ayah audio...');
 
-    if (!("caches" in window)) {
-      setCacheStatus("This browser does not support audio caching.");
-      showDownloadToast("Audio download is not supported on this browser.", "error");
+    if (!('caches' in window)) {
+      setCacheStatus('This browser does not support audio caching.');
       return;
     }
 
     try {
-      const response = await fetch(baseAudioUrl, { mode: "cors" });
-      if (!response.ok)
-        throw new Error("Audio server rejected the download request.");
+      const response = await fetch(audioUrl, { mode: 'cors' });
+      if (!response.ok) throw new Error('Audio server rejected the download request.');
 
       const cache = await caches.open(AUDIO_CACHE_NAME);
-      await cache.put(baseAudioUrl, response.clone());
-      localStorage.setItem(downloadKey, "cached");
+      await cache.put(audioUrl, response.clone());
+      localStorage.setItem(downloadKey, 'cached');
       setDownloaded(true);
 
       const blob = await response.blob();
@@ -604,100 +477,55 @@ export default function AudioPlayer({
         setEffectiveAudioUrl(objectUrl);
       }
 
-      setCacheStatus("Saved for offline playback on this browser.");
-      showDownloadToast("Ayah audio saved offline.", "saved");
-      setTimeout(() => setCacheStatus(""), 3500);
+      setCacheStatus('Saved for offline playback on this browser.');
+      setTimeout(() => setCacheStatus(''), 3500);
     } catch {
-      setCacheStatus(
-        "Could not save this audio. It still works online; try again or use another reciter.",
-      );
-      showDownloadToast("Could not save audio. Try again.", "error");
+      setCacheStatus('Could not save this audio. It still works online; try again or use another reciter.');
     }
   };
 
-  const progressPercentage =
-    duration > 0
-      ? Math.min(100, Math.max(0, (currentTime / duration) * 100))
-      : 0;
+  const progressPercentage = duration > 0 ? Math.min(100, Math.max(0, (currentTime / duration) * 100)) : 0;
   const canGoNext = Boolean(getNextVerse(currentSurah, currentAyah));
-  const repeatLabel =
-    repeatMode === "off"
-      ? "Repeat off"
-      : repeatMode === "ayah"
-        ? "Repeat ayah"
-        : "Repeat surah";
+  const repeatLabel = repeatMode === 'off' ? 'Repeat off' : repeatMode === 'ayah' ? 'Repeat ayah' : 'Repeat surah';
+  const shouldShowAudioBar = isPlaying || isBuffering;
 
   return (
     <>
-      {downloadToast.visible && (
-        <div className="fixed left-0 right-0 z-[80] px-4 pointer-events-none noor-download-toast-bottom">
-          <div
-            className={`mx-auto flex w-fit max-w-[92vw] items-center gap-2 rounded-full border px-3 py-2 text-[11px] font-extrabold shadow-2xl backdrop-blur-md ${
-              downloadToast.kind === "saved"
-                ? "border-emerald-400/40 bg-emerald-600 text-white"
-                : downloadToast.kind === "error"
-                  ? "border-red-400/40 bg-red-600 text-white"
-                  : isLightMode
-                    ? "border-slate-200 bg-white/95 text-slate-800"
-                    : "border-slate-700 bg-slate-900/95 text-white"
-            }`}
-          >
-            {downloadToast.kind === "saved" ? (
-              <Check className="h-3.5 w-3.5" />
-            ) : downloadToast.kind === "error" ? (
-              <AlertCircle className="h-3.5 w-3.5" />
-            ) : (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            )}
-            <span>{downloadToast.message}</span>
-          </div>
-        </div>
-      )}
-
-      <div
-        className={`fixed left-0 right-0 z-30 border-t backdrop-blur-md transition-all noor-audio-bottom ${
+      {shouldShowAudioBar && (
+        <div
+        className={`fixed bottom-16 left-0 right-0 z-30 border-t backdrop-blur-md transition-all ${
           isLightMode
-            ? "bg-white/95 border-slate-200 text-slate-800"
-            : "bg-slate-900/95 border-slate-800 text-white"
+            ? 'bg-white/95 border-slate-200 text-slate-800'
+            : 'bg-slate-900/95 border-slate-800 text-white'
         }`}
       >
-        <div className="mx-auto flex max-w-lg items-center justify-between gap-2 px-2 py-2 min-[390px]:gap-3 min-[390px]:px-3 min-[390px]:py-2.5">
+        <div className="max-w-lg mx-auto px-3 py-2.5 flex items-center justify-between gap-3">
           <button
             type="button"
             onClick={() => setIsExpanded(true)}
-            className="group flex min-w-0 flex-1 items-center gap-2 overflow-hidden text-left active:scale-[0.99] min-[390px]:gap-3"
+            className="flex items-center gap-3 flex-1 text-left group overflow-hidden active:scale-[0.99]"
           >
-            <div className="relative flex h-9 w-9 flex-shrink-0 items-center justify-center overflow-hidden rounded-xl bg-emerald-700 shadow-md min-[390px]:h-10 min-[390px]:w-10">
-              <img
-                src={activeReciter.photoUrl}
-                alt={activeReciter.name}
-                className="absolute inset-0 w-full h-full object-cover"
-              />
-              {isPlaying && (
-                <Volume2 className="w-5 h-5 text-white absolute animate-pulse drop-shadow" />
-              )}
+            <div className="relative w-10 h-10 rounded-xl overflow-hidden bg-emerald-700 flex-shrink-0 flex items-center justify-center shadow-md">
+              <img src={activeReciter.photoUrl} alt={activeReciter.name} className="absolute inset-0 w-full h-full object-cover" />
+              {isPlaying && <Volume2 className="w-5 h-5 text-white absolute animate-pulse drop-shadow" />}
             </div>
             <div className="overflow-hidden min-w-0">
               <div className="flex items-center gap-1.5 min-w-0">
-                <p className="truncate text-xs font-extrabold min-[390px]:text-sm">
-                  {surahMeta.englishName}
-                </p>
+                <p className="text-sm font-extrabold truncate">{surahMeta.englishName}</p>
                 <span className="text-xs text-emerald-500 font-bold flex-shrink-0">
                   {currentSurah}:{currentAyah}
                 </span>
               </div>
-              <p className={`truncate text-[10px] min-[390px]:text-xs ${mutedText}`}>
-                {activeReciter.name}
-              </p>
+              <p className={`text-xs truncate ${mutedText}`}>{activeReciter.name}</p>
             </div>
             <ChevronUp className="w-4 h-4 text-slate-400 ml-auto flex-shrink-0 group-hover:text-emerald-500 transition-colors" />
           </button>
 
-          <div className="flex flex-shrink-0 items-center gap-0.5 min-[390px]:gap-1">
+          <div className="flex items-center gap-1 flex-shrink-0">
             <button
               type="button"
               onClick={goPrevious}
-              className={`rounded-xl border p-1.5 transition-colors active:scale-95 min-[390px]:p-2 ${softButton}`}
+              className={`p-2 rounded-xl border transition-colors active:scale-95 ${softButton}`}
               aria-label="Previous ayah"
             >
               <SkipBack className="w-4 h-4" />
@@ -705,8 +533,8 @@ export default function AudioPlayer({
             <button
               type="button"
               onClick={handleTogglePlayback}
-              className="rounded-full bg-emerald-600 p-2 text-white shadow-md transition-all active:scale-95 hover:bg-emerald-500 min-[390px]:p-2.5"
-              aria-label={isPlaying ? "Pause audio" : "Play audio"}
+              className="p-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-full transition-all shadow-md active:scale-95"
+              aria-label={isPlaying ? 'Pause audio' : 'Play audio'}
             >
               {isBuffering ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -720,7 +548,7 @@ export default function AudioPlayer({
               type="button"
               onClick={goNext}
               disabled={!canGoNext}
-              className={`rounded-xl border p-1.5 transition-colors active:scale-95 disabled:opacity-35 min-[390px]:p-2 ${softButton}`}
+              className={`p-2 rounded-xl border transition-colors active:scale-95 disabled:opacity-35 ${softButton}`}
               aria-label="Next ayah"
             >
               <SkipForward className="w-4 h-4" />
@@ -728,27 +556,21 @@ export default function AudioPlayer({
           </div>
         </div>
 
-        <div className={isLightMode ? "h-1 bg-slate-100" : "h-1 bg-slate-800"}>
-          <div
-            className="h-full bg-emerald-500 transition-all"
-            style={{ width: `${progressPercentage}%` }}
-          />
+        <div className={isLightMode ? 'h-1 bg-slate-100' : 'h-1 bg-slate-800'}>
+          <div className="h-full bg-emerald-500 transition-all" style={{ width: `${progressPercentage}%` }} />
         </div>
       </div>
+      )}
 
       {isExpanded && (
         <div
-          className={`fixed inset-0 z-50 flex flex-col overflow-hidden transition-colors noor-fullscreen-safe ${
-            isLightMode
-              ? "bg-slate-50 text-slate-800"
-              : "bg-slate-950 text-white"
+          className={`fixed inset-0 z-50 flex flex-col transition-colors ${
+            isLightMode ? 'bg-slate-50 text-slate-800' : 'bg-slate-950 text-white'
           }`}
         >
           <div
-            className={`flex items-center justify-between border-b px-4 py-3 min-[390px]:px-5 min-[390px]:py-4 ${
-              isLightMode
-                ? "border-slate-200 bg-white/90"
-                : "border-slate-800 bg-slate-950/90"
+            className={`flex items-center justify-between px-5 py-4 border-b ${
+              isLightMode ? 'border-slate-200 bg-white/90' : 'border-slate-800 bg-slate-950/90'
             }`}
           >
             <button
@@ -759,18 +581,12 @@ export default function AudioPlayer({
             >
               <ChevronDown className="w-6 h-6" />
             </button>
-            <span
-              className={`text-xs uppercase tracking-widest font-extrabold ${mutedText}`}
-            >
-              Quran Audio Player
-            </span>
+            <span className={`text-xs uppercase tracking-widest font-extrabold ${mutedText}`}>Quran Audio Player</span>
             <button
               type="button"
               onClick={() => setShowReciterPicker(!showReciterPicker)}
               className={`p-2 rounded-full transition-colors border ${
-                showReciterPicker
-                  ? "bg-emerald-600 text-white border-emerald-500"
-                  : softButton
+                showReciterPicker ? 'bg-emerald-600 text-white border-emerald-500' : softButton
               }`}
               aria-label="Select reciter"
             >
@@ -778,26 +594,17 @@ export default function AudioPlayer({
             </button>
           </div>
 
-          <div className="mx-auto flex w-full max-w-md flex-1 flex-col overflow-y-auto px-4 py-4 min-[390px]:px-5 min-[390px]:py-5 no-scrollbar">
+          <div className="flex-1 max-w-md w-full mx-auto px-5 py-5 flex flex-col overflow-y-auto no-scrollbar">
             {showReciterPicker ? (
               <div className="flex flex-col gap-4 pb-10">
                 <div>
                   <h3 className="text-xl font-black">Select Reciter</h3>
-                  <p className={`text-xs mt-1 ${mutedText}`}>
-                    Search, filter, and favorite your main reciters for faster
-                    access.
-                  </p>
+                  <p className={`text-xs mt-1 ${mutedText}`}>Search, filter, and favorite your main reciters for faster access.</p>
                 </div>
 
                 <div className={`rounded-2xl border p-3 ${cardBase}`}>
-                  <label
-                    className={`text-[11px] font-black uppercase tracking-wider ${mutedText}`}
-                  >
-                    Search reciters
-                  </label>
-                  <div
-                    className={`mt-2 flex items-center gap-2 rounded-2xl border px-3 py-2 ${isLightMode ? "bg-white border-slate-200" : "bg-slate-950 border-slate-700"}`}
-                  >
+                  <label className={`text-[11px] font-black uppercase tracking-wider ${mutedText}`}>Search reciters</label>
+                  <div className={`mt-2 flex items-center gap-2 rounded-2xl border px-3 py-2 ${isLightMode ? 'bg-white border-slate-200' : 'bg-slate-950 border-slate-700'}`}>
                     <Search className="w-4 h-4 text-emerald-500 flex-shrink-0" />
                     <input
                       type="search"
@@ -809,24 +616,19 @@ export default function AudioPlayer({
                   </div>
 
                   <div className="mt-3 flex gap-2 overflow-x-auto no-scrollbar pb-1">
-                    {(
-                      [
-                        ["all", "All"],
-                        [
-                          "favorites",
-                          `Favorites ${favoriteReciterIds.length ? `(${favoriteReciterIds.length})` : ""}`,
-                        ],
-                        ["murattal", "Murattal"],
-                        ["mujawwad", "Mujawwad"],
-                      ] as const
-                    ).map(([filter, label]) => (
+                    {([
+                      ['all', 'All'],
+                      ['favorites', `Favorites ${favoriteReciterIds.length ? `(${favoriteReciterIds.length})` : ''}`],
+                      ['murattal', 'Murattal'],
+                      ['mujawwad', 'Mujawwad'],
+                    ] as const).map(([filter, label]) => (
                       <button
                         key={filter}
                         type="button"
                         onClick={() => setReciterFilter(filter)}
                         className={`px-3 py-2 rounded-xl text-xs font-black border whitespace-nowrap transition-all active:scale-95 ${
                           reciterFilter === filter
-                            ? "bg-emerald-600 border-emerald-500 text-white"
+                            ? 'bg-emerald-600 border-emerald-500 text-white'
                             : softButton
                         }`}
                       >
@@ -838,13 +640,9 @@ export default function AudioPlayer({
 
                 <div className="space-y-2.5">
                   {filteredReciters.length === 0 ? (
-                    <div
-                      className={`p-5 rounded-2xl border text-center ${cardBase}`}
-                    >
+                    <div className={`p-5 rounded-2xl border text-center ${cardBase}`}>
                       <p className="text-sm font-extrabold">No reciter found</p>
-                      <p className={`text-xs mt-1 ${mutedText}`}>
-                        Try another spelling or switch the filter back to All.
-                      </p>
+                      <p className={`text-xs mt-1 ${mutedText}`}>Try another spelling or switch the filter back to All.</p>
                     </div>
                   ) : (
                     filteredReciters.map((reciter) => {
@@ -855,7 +653,7 @@ export default function AudioPlayer({
                           key={reciter.id}
                           className={`w-full p-3 rounded-2xl flex items-center gap-3 border text-left transition-all ${
                             isSelected
-                              ? "bg-emerald-600 border-emerald-500 text-white shadow-lg shadow-emerald-950/30"
+                              ? 'bg-emerald-600 border-emerald-500 text-white shadow-lg shadow-emerald-950/30'
                               : cardBase
                           }`}
                         >
@@ -868,30 +666,17 @@ export default function AudioPlayer({
                             }}
                             className="flex items-center gap-4 flex-1 min-w-0 text-left active:scale-[0.99]"
                           >
-                            <img
-                              src={reciter.photoUrl}
-                              alt={reciter.name}
-                              className="w-14 h-14 rounded-xl object-cover shadow flex-shrink-0"
-                            />
+                            <img src={reciter.photoUrl} alt={reciter.name} className="w-14 h-14 rounded-xl object-cover shadow flex-shrink-0" />
                             <div className="flex-1 overflow-hidden min-w-0">
                               <div className="flex items-center gap-2 min-w-0">
-                                <p className="truncate text-xs font-extrabold min-[390px]:text-sm">
-                                  {reciter.name}
-                                </p>
-                                {isSelected && (
-                                  <Check className="w-4 h-4 flex-shrink-0" />
-                                )}
+                                <p className="text-sm font-extrabold truncate">{reciter.name}</p>
+                                {isSelected && <Check className="w-4 h-4 flex-shrink-0" />}
                               </div>
-                              <p
-                                className={`text-xs font-arabic font-semibold mt-0.5 ${isSelected ? "text-emerald-50" : "text-emerald-500"}`}
-                              >
+                              <p className={`text-xs font-arabic font-semibold mt-0.5 ${isSelected ? 'text-emerald-50' : 'text-emerald-500'}`}>
                                 {reciter.arabicName}
                               </p>
-                              <p
-                                className={`text-[11px] mt-1 line-clamp-2 ${isSelected ? "text-emerald-50/85" : mutedText}`}
-                              >
-                                {reciter.style} • {reciter.bitrate} •{" "}
-                                {reciter.description}
+                              <p className={`text-[11px] mt-1 line-clamp-2 ${isSelected ? 'text-emerald-50/85' : mutedText}`}>
+                                {reciter.style} • {reciter.bitrate} • {reciter.description}
                               </p>
                             </div>
                           </button>
@@ -901,25 +686,15 @@ export default function AudioPlayer({
                             onClick={() => toggleFavoriteReciter(reciter.id)}
                             className={`p-2 rounded-xl border transition-all active:scale-95 ${
                               isFavorite
-                                ? "bg-amber-400/20 border-amber-400/40 text-amber-300"
+                                ? 'bg-amber-400/20 border-amber-400/40 text-amber-300'
                                 : isSelected
-                                  ? "border-emerald-300/50 text-emerald-50 hover:bg-white/10"
+                                  ? 'border-emerald-300/50 text-emerald-50 hover:bg-white/10'
                                   : softButton
                             }`}
-                            title={
-                              isFavorite
-                                ? "Remove from favorites"
-                                : "Add to favorites"
-                            }
-                            aria-label={
-                              isFavorite
-                                ? `Remove ${reciter.name} from favorites`
-                                : `Add ${reciter.name} to favorites`
-                            }
+                            title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+                            aria-label={isFavorite ? `Remove ${reciter.name} from favorites` : `Add ${reciter.name} to favorites`}
                           >
-                            <Star
-                              className={`w-4 h-4 ${isFavorite ? "fill-current" : ""}`}
-                            />
+                            <Star className={`w-4 h-4 ${isFavorite ? 'fill-current' : ''}`} />
                           </button>
                         </div>
                       );
@@ -928,20 +703,14 @@ export default function AudioPlayer({
                 </div>
 
                 <p className={`text-[11px] text-center ${mutedText}`}>
-                  Showing {filteredReciters.length} of {RECITERS_LIST.length}{" "}
-                  reciters. Favorite your main reciters so they always appear
-                  first.
+                  Showing {filteredReciters.length} of {RECITERS_LIST.length} reciters. Favorite your main reciters so they always appear first.
                 </p>
               </div>
             ) : (
               <>
                 <div className="flex flex-col items-center text-center py-5">
-                  <div className="group relative mb-6 h-48 w-48 overflow-hidden rounded-[1.75rem] border border-emerald-500/20 shadow-2xl min-[390px]:h-56 min-[390px]:w-56 sm:h-64 sm:w-64">
-                    <img
-                      src={activeReciter.photoUrl}
-                      alt={activeReciter.name}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                    />
+                  <div className="w-56 h-56 sm:w-64 sm:h-64 rounded-[2rem] overflow-hidden relative shadow-2xl mb-7 border border-emerald-500/20 group">
+                    <img src={activeReciter.photoUrl} alt={activeReciter.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                     <div className="absolute inset-0 bg-gradient-to-t from-slate-950/85 via-slate-900/15 to-transparent" />
                     <div className="absolute bottom-4 left-4 right-4 flex items-center justify-between gap-3">
                       <span className="text-xs px-2.5 py-1 bg-emerald-600 text-white font-extrabold rounded-lg backdrop-blur-md">
@@ -952,26 +721,19 @@ export default function AudioPlayer({
                         onClick={handleCacheCurrentAyah}
                         className={`p-2.5 rounded-xl backdrop-blur-md transition-all border ${
                           downloaded
-                            ? "bg-emerald-500/25 border-emerald-400/40 text-emerald-100"
-                            : "bg-slate-900/80 border-slate-700 text-white hover:bg-slate-800"
+                            ? 'bg-emerald-500/25 border-emerald-400/40 text-emerald-100'
+                            : 'bg-slate-900/80 border-slate-700 text-white hover:bg-slate-800'
                         }`}
                         title="Save current ayah audio"
                       >
-                        {downloaded ? (
-                          <Check className="w-4 h-4" />
-                        ) : (
-                          <Download className="w-4 h-4" />
-                        )}
+                        {downloaded ? <Check className="w-4 h-4" /> : <Download className="w-4 h-4" />}
                       </button>
                     </div>
                   </div>
 
-                  <h2 className="mb-1 text-xl font-black min-[390px]:text-2xl">
-                    {surahMeta.englishName}
-                  </h2>
+                  <h2 className="text-2xl font-black mb-1">{surahMeta.englishName}</h2>
                   <p className="text-sm text-emerald-500 font-bold mb-1">
-                    Surah {surahMeta.name} • Ayah {currentAyah} of{" "}
-                    {surahMeta.numberOfAyahs}
+                    Surah {surahMeta.name} • Ayah {currentAyah} of {surahMeta.numberOfAyahs}
                   </p>
                   <button
                     type="button"
@@ -980,48 +742,20 @@ export default function AudioPlayer({
                   >
                     {activeReciter.name}
                   </button>
-                  {selectedAudioSource?.isFallback && (
-                    <p className="mt-2 text-[11px] font-bold text-amber-500">
-                      Backup audio active: {selectedAudioSource.reciterName}
-                    </p>
-                  )}
                 </div>
 
-                {(playerError || cacheStatus || !isOnline) && (
+                {(playerError || cacheStatus) && (
                   <div
                     className={`mb-4 p-3 rounded-2xl border text-xs leading-relaxed flex gap-2 ${
-                      playerError || !isOnline
-                        ? isLightMode
-                          ? "bg-amber-50 border-amber-200 text-amber-800"
-                          : "bg-red-950/30 border-red-500/30 text-red-200"
+                      playerError
+                        ? 'bg-red-950/30 border-red-500/30 text-red-200'
                         : isLightMode
-                          ? "bg-emerald-50 border-emerald-200 text-emerald-800"
-                          : "bg-emerald-950/30 border-emerald-700/40 text-emerald-200"
+                          ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                          : 'bg-emerald-950/30 border-emerald-700/40 text-emerald-200'
                     }`}
                   >
-                    {playerError ? (
-                      <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                    ) : !isOnline ? (
-                      <WifiOff className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                    ) : (
-                      <Check className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <p>
-                        {playerError ||
-                          cacheStatus ||
-                          "Offline mode: audio will play only if this ayah was saved in this browser."}
-                      </p>
-                      {playerError && (
-                        <button
-                          type="button"
-                          onClick={handleRetryAudio}
-                          className="mt-2 inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3 py-2 text-white font-extrabold active:scale-95"
-                        >
-                          <RefreshCw className="w-3.5 h-3.5" /> Retry audio
-                        </button>
-                      )}
-                    </div>
+                    {playerError ? <AlertCircle className="w-4 h-4 flex-shrink-0" /> : <Check className="w-4 h-4 flex-shrink-0" />}
+                    <span>{playerError || cacheStatus}</span>
                   </div>
                 )}
 
@@ -1037,9 +771,7 @@ export default function AudioPlayer({
                       className="w-full accent-emerald-500"
                       aria-label="Audio progress"
                     />
-                    <div
-                      className={`flex justify-between text-[11px] font-bold ${mutedText}`}
-                    >
+                    <div className={`flex justify-between text-[11px] font-bold ${mutedText}`}>
                       <span>{formatTime(currentTime)}</span>
                       <span>{formatTime(duration)}</span>
                     </div>
@@ -1050,21 +782,21 @@ export default function AudioPlayer({
                       type="button"
                       onClick={toggleRepeat}
                       className={`relative p-3 rounded-2xl border transition-all active:scale-95 ${
-                        repeatMode !== "off"
-                          ? "bg-emerald-600 text-white border-emerald-500 shadow-lg shadow-emerald-950/30"
+                        repeatMode !== 'off'
+                          ? 'bg-emerald-600 text-white border-emerald-500 shadow-lg shadow-emerald-950/30'
                           : softButton
                       }`}
                       title={repeatLabel}
                     >
                       <Repeat className="w-5 h-5" />
-                      {repeatMode !== "off" && (
+                      {repeatMode !== 'off' && (
                         <span className="absolute -top-1 -right-1 bg-white text-emerald-700 text-[9px] px-1.5 rounded-full font-black">
-                          {repeatMode === "ayah" ? "1" : "S"}
+                          {repeatMode === 'ayah' ? '1' : 'S'}
                         </span>
                       )}
                     </button>
 
-                    <div className="flex items-center gap-2 min-[390px]:gap-4">
+                    <div className="flex items-center gap-4">
                       <button
                         type="button"
                         onClick={goPrevious}
@@ -1076,8 +808,8 @@ export default function AudioPlayer({
                       <button
                         type="button"
                         onClick={handleTogglePlayback}
-                        className="rounded-3xl bg-emerald-600 p-4 text-white shadow-xl shadow-emerald-900/40 transition-all active:scale-95 hover:bg-emerald-500 min-[390px]:p-5"
-                        aria-label={isPlaying ? "Pause audio" : "Play audio"}
+                        className="p-5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-3xl shadow-xl shadow-emerald-900/40 transition-all active:scale-95"
+                        aria-label={isPlaying ? 'Pause audio' : 'Play audio'}
                       >
                         {isBuffering ? (
                           <Loader2 className="w-8 h-8 animate-spin" />
@@ -1111,13 +843,9 @@ export default function AudioPlayer({
                     <div className="flex items-center justify-between gap-3 mb-2">
                       <div className="flex items-center gap-2">
                         <Volume2 className="w-4 h-4 text-emerald-500" />
-                        <span className="text-xs font-extrabold uppercase tracking-wider">
-                          Volume
-                        </span>
+                        <span className="text-xs font-extrabold uppercase tracking-wider">Volume</span>
                       </div>
-                      <span className={`text-xs font-bold ${mutedText}`}>
-                        {Math.round(volume * 100)}%
-                      </span>
+                      <span className={`text-xs font-bold ${mutedText}`}>{Math.round(volume * 100)}%</span>
                     </div>
                     <input
                       type="range"
@@ -1125,20 +853,14 @@ export default function AudioPlayer({
                       max={1}
                       step={0.05}
                       value={volume}
-                      onChange={(event) =>
-                        setVolume(Number(event.target.value))
-                      }
+                      onChange={(event) => setVolume(Number(event.target.value))}
                       className="w-full accent-emerald-500"
                       aria-label="Volume"
                     />
                   </div>
 
-                  <p
-                    className={`text-[11px] leading-relaxed text-center ${mutedText}`}
-                  >
-                    Audio streams online. Tap the save icon on an ayah to cache
-                    that ayah for offline playback where the browser/server
-                    allows it.
+                  <p className={`text-[11px] leading-relaxed text-center ${mutedText}`}>
+                    Audio is streamed from the selected public recitation server. Saving works only when the browser and audio server allow offline caching.
                   </p>
                 </div>
               </>
