@@ -594,19 +594,19 @@ export default function AudioPlayer({
   return (
     <>
       <div
-        className={`fixed bottom-16 left-0 right-0 z-30 border-t backdrop-blur-md transition-all ${
+        className={`fixed left-0 right-0 z-30 border-t backdrop-blur-md transition-all noor-audio-bottom ${
           isLightMode
             ? "bg-white/95 border-slate-200 text-slate-800"
             : "bg-slate-900/95 border-slate-800 text-white"
         }`}
       >
-        <div className="max-w-lg mx-auto px-3 py-2.5 flex items-center justify-between gap-3">
+        <div className="mx-auto flex max-w-lg items-center justify-between gap-2 px-2 py-2 min-[390px]:gap-3 min-[390px]:px-3 min-[390px]:py-2.5">
           <button
             type="button"
             onClick={() => setIsExpanded(true)}
-            className="flex items-center gap-3 flex-1 text-left group overflow-hidden active:scale-[0.99]"
+            className="group flex min-w-0 flex-1 items-center gap-2 overflow-hidden text-left active:scale-[0.99] min-[390px]:gap-3"
           >
-            <div className="relative w-10 h-10 rounded-xl overflow-hidden bg-emerald-700 flex-shrink-0 flex items-center justify-center shadow-md">
+            <div className="relative flex h-9 w-9 flex-shrink-0 items-center justify-center overflow-hidden rounded-xl bg-emerald-700 shadow-md min-[390px]:h-10 min-[390px]:w-10">
               <img
                 src={activeReciter.photoUrl}
                 alt={activeReciter.name}
@@ -618,25 +618,25 @@ export default function AudioPlayer({
             </div>
             <div className="overflow-hidden min-w-0">
               <div className="flex items-center gap-1.5 min-w-0">
-                <p className="text-sm font-extrabold truncate">
+                <p className="truncate text-xs font-extrabold min-[390px]:text-sm">
                   {surahMeta.englishName}
                 </p>
                 <span className="text-xs text-emerald-500 font-bold flex-shrink-0">
                   {currentSurah}:{currentAyah}
                 </span>
               </div>
-              <p className={`text-xs truncate ${mutedText}`}>
+              <p className={`truncate text-[10px] min-[390px]:text-xs ${mutedText}`}>
                 {activeReciter.name}
               </p>
             </div>
             <ChevronUp className="w-4 h-4 text-slate-400 ml-auto flex-shrink-0 group-hover:text-emerald-500 transition-colors" />
           </button>
 
-          <div className="flex items-center gap-1 flex-shrink-0">
+          <div className="flex flex-shrink-0 items-center gap-0.5 min-[390px]:gap-1">
             <button
               type="button"
               onClick={goPrevious}
-              className={`p-2 rounded-xl border transition-colors active:scale-95 ${softButton}`}
+              className={`rounded-xl border p-1.5 transition-colors active:scale-95 min-[390px]:p-2 ${softButton}`}
               aria-label="Previous ayah"
             >
               <SkipBack className="w-4 h-4" />
@@ -644,7 +644,7 @@ export default function AudioPlayer({
             <button
               type="button"
               onClick={handleTogglePlayback}
-              className="p-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-full transition-all shadow-md active:scale-95"
+              className="rounded-full bg-emerald-600 p-2 text-white shadow-md transition-all active:scale-95 hover:bg-emerald-500 min-[390px]:p-2.5"
               aria-label={isPlaying ? "Pause audio" : "Play audio"}
             >
               {isBuffering ? (
@@ -659,7 +659,7 @@ export default function AudioPlayer({
               type="button"
               onClick={goNext}
               disabled={!canGoNext}
-              className={`p-2 rounded-xl border transition-colors active:scale-95 disabled:opacity-35 ${softButton}`}
+              className={`rounded-xl border p-1.5 transition-colors active:scale-95 disabled:opacity-35 min-[390px]:p-2 ${softButton}`}
               aria-label="Next ayah"
             >
               <SkipForward className="w-4 h-4" />
@@ -677,14 +677,14 @@ export default function AudioPlayer({
 
       {isExpanded && (
         <div
-          className={`fixed inset-0 z-50 flex flex-col transition-colors ${
+          className={`fixed inset-0 z-50 flex flex-col overflow-hidden transition-colors noor-fullscreen-safe ${
             isLightMode
               ? "bg-slate-50 text-slate-800"
               : "bg-slate-950 text-white"
           }`}
         >
           <div
-            className={`flex items-center justify-between px-5 py-4 border-b ${
+            className={`flex items-center justify-between border-b px-4 py-3 min-[390px]:px-5 min-[390px]:py-4 ${
               isLightMode
                 ? "border-slate-200 bg-white/90"
                 : "border-slate-800 bg-slate-950/90"
@@ -717,7 +717,7 @@ export default function AudioPlayer({
             </button>
           </div>
 
-          <div className="flex-1 max-w-md w-full mx-auto px-5 py-5 flex flex-col overflow-y-auto no-scrollbar">
+          <div className="mx-auto flex w-full max-w-md flex-1 flex-col overflow-y-auto px-4 py-4 min-[390px]:px-5 min-[390px]:py-5 no-scrollbar">
             {showReciterPicker ? (
               <div className="flex flex-col gap-4 pb-10">
                 <div>
@@ -814,7 +814,7 @@ export default function AudioPlayer({
                             />
                             <div className="flex-1 overflow-hidden min-w-0">
                               <div className="flex items-center gap-2 min-w-0">
-                                <p className="text-sm font-extrabold truncate">
+                                <p className="truncate text-xs font-extrabold min-[390px]:text-sm">
                                   {reciter.name}
                                 </p>
                                 {isSelected && (
@@ -875,7 +875,7 @@ export default function AudioPlayer({
             ) : (
               <>
                 <div className="flex flex-col items-center text-center py-5">
-                  <div className="w-56 h-56 sm:w-64 sm:h-64 rounded-[2rem] overflow-hidden relative shadow-2xl mb-7 border border-emerald-500/20 group">
+                  <div className="group relative mb-6 h-48 w-48 overflow-hidden rounded-[1.75rem] border border-emerald-500/20 shadow-2xl min-[390px]:h-56 min-[390px]:w-56 sm:h-64 sm:w-64">
                     <img
                       src={activeReciter.photoUrl}
                       alt={activeReciter.name}
@@ -905,7 +905,7 @@ export default function AudioPlayer({
                     </div>
                   </div>
 
-                  <h2 className="text-2xl font-black mb-1">
+                  <h2 className="mb-1 text-xl font-black min-[390px]:text-2xl">
                     {surahMeta.englishName}
                   </h2>
                   <p className="text-sm text-emerald-500 font-bold mb-1">
@@ -1003,7 +1003,7 @@ export default function AudioPlayer({
                       )}
                     </button>
 
-                    <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-2 min-[390px]:gap-4">
                       <button
                         type="button"
                         onClick={goPrevious}
@@ -1015,7 +1015,7 @@ export default function AudioPlayer({
                       <button
                         type="button"
                         onClick={handleTogglePlayback}
-                        className="p-5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-3xl shadow-xl shadow-emerald-900/40 transition-all active:scale-95"
+                        className="rounded-3xl bg-emerald-600 p-4 text-white shadow-xl shadow-emerald-900/40 transition-all active:scale-95 hover:bg-emerald-500 min-[390px]:p-5"
                         aria-label={isPlaying ? "Pause audio" : "Play audio"}
                       >
                         {isBuffering ? (

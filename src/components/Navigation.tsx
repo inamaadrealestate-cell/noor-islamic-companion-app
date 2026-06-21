@@ -19,13 +19,13 @@ export default function Navigation({ activeTab, setActiveTab, isLightMode }: Nav
 
   return (
     <nav
-      className={`fixed bottom-0 left-0 right-0 z-40 border-t backdrop-blur-lg transition-colors duration-200 ${
+      className={`fixed bottom-0 left-0 right-0 z-40 border-t backdrop-blur-xl transition-colors duration-200 noor-safe-bottom ${
         isLightMode
-          ? "bg-white/90 border-slate-200 text-slate-600"
-          : "bg-slate-900/90 border-slate-800 text-slate-400"
+          ? "bg-white/95 border-slate-200 text-slate-600 shadow-[0_-8px_24px_rgba(15,23,42,0.06)]"
+          : "bg-slate-950/95 border-slate-800 text-slate-400 shadow-[0_-8px_24px_rgba(0,0,0,0.28)]"
       }`}
     >
-      <div className="max-w-lg mx-auto px-1.5 h-16 flex items-center justify-around gap-0.5">
+      <div className="mx-auto grid h-16 w-full max-w-lg grid-cols-7 items-stretch px-1 min-[390px]:px-2">
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = activeTab === item.id;
@@ -33,7 +33,7 @@ export default function Navigation({ activeTab, setActiveTab, isLightMode }: Nav
             <button
               key={item.id}
               onClick={() => setActiveTab(item.id)}
-              className={`flex flex-col items-center justify-center min-w-0 flex-1 h-full transition-all active:scale-95 ${
+              className={`group flex min-w-0 flex-col items-center justify-center gap-0.5 rounded-2xl px-0.5 transition-all active:scale-95 ${
                 isActive
                   ? "text-emerald-500 font-semibold"
                   : isLightMode
@@ -41,16 +41,21 @@ export default function Navigation({ activeTab, setActiveTab, isLightMode }: Nav
                     : "hover:text-slate-200"
               }`}
               aria-label={`Open ${item.label}`}
+              aria-current={isActive ? "page" : undefined}
               type="button"
             >
               <div
-                className={`p-1 rounded-full transition-all ${
-                  isActive ? (isLightMode ? "bg-emerald-100" : "bg-emerald-950/80") : ""
+                className={`flex h-7 w-7 items-center justify-center rounded-2xl transition-all ${
+                  isActive
+                    ? isLightMode
+                      ? "bg-emerald-100 shadow-sm"
+                      : "bg-emerald-950/90 shadow-sm shadow-emerald-950/40"
+                    : "group-active:bg-slate-500/10"
                 }`}
               >
-                <Icon className={`w-5 h-5 ${isActive ? "text-emerald-500" : ""}`} />
+                <Icon className={`h-4.5 w-4.5 xs-compact-nav-icon ${isActive ? "text-emerald-500" : ""}`} />
               </div>
-              <span className="text-[9px] sm:text-[10px] mt-1 tracking-wide truncate max-w-full">
+              <span className="xs-hide-label max-w-full truncate text-[8.5px] font-bold leading-none tracking-wide min-[390px]:text-[9.5px] sm:text-[10px]">
                 {item.label}
               </span>
             </button>

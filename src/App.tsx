@@ -210,7 +210,7 @@ export default function App() {
   return (
     <AppErrorBoundary isLightMode={isLightMode}>
       <div
-        className={`min-h-screen transition-colors duration-200 ${
+        className={`min-h-dvh w-full overflow-x-hidden transition-colors duration-200 ${
           isLightMode ? "bg-slate-50 text-slate-800" : "bg-slate-900 text-white"
         }`}
       >
@@ -261,7 +261,7 @@ export default function App() {
           </div>
         )}
 
-        <main className="w-full">
+        <main className="w-full overflow-x-hidden">
           {activeTab === "home" && (
             <HomeScreen
               setActiveTab={setActiveTab}
