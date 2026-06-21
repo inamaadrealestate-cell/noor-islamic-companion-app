@@ -41,11 +41,37 @@ interface QuranApiSurahResponse {
   };
 }
 
+interface QuranFullApiSurah {
+  number: number;
+  ayahs: QuranApiAyah[];
+}
+
+interface QuranFullApiResponse {
+  data?: {
+    surahs?: QuranFullApiSurah[];
+  };
+}
+
 interface AyahData {
   number: number;
   numberInSurah: number;
   text: string;
   translation: string;
+}
+
+interface FullSearchAyah {
+  surahNumber: number;
+  ayahNumber: number;
+  arabic: string;
+  translation: string;
+  surahEnglishName: string;
+  surahArabicName: string;
+}
+
+interface DirectAyahJump {
+  surahNumber: number;
+  ayahNumber: number;
+  label: string;
 }
 
 type ViewTab = 'surahs' | 'juz' | 'bookmarks' | 'search' | 'reading';
@@ -83,6 +109,97 @@ function getJuzIndexForSurah(surahNumber: number) {
   return foundIndex;
 }
 
+
+const ARABIC_DIACRITICS = /[\u064B-\u065F\u0670\u06D6-\u06ED]/g;
+
+function normalizeArabicText(value: string) {
+  return value
+    .replace(ARABIC_DIACRITICS, '')
+    .replace(/[إأآا]/g, 'ا')
+    .replace(/ى/g, 'ي')
+    .replace(/ؤ/g, 'و')
+    .replace(/ئ/g, 'ي')
+    .replace(/ة/g, 'ه')
+    .replace(/ـ/g, '')
+    .trim();
+}
+
+function normalizeSearchText(value: string) {
+  return normalizeArabicText(value).toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+function getSurahByNumber(number: number) {
+  return SURAH_LIST.find((surah) => surah.number === number) || null;
+}
+
+function isValidAyahReference(surahNumber: number, ayahNumber: number) {
+  const surah = getSurahByNumber(surahNumber);
+  return Boolean(surah && ayahNumber >= 1 && ayahNumber <= surah.numberOfAyahs);
+}
+
+function parseDirectAyahJump(rawQuery: string): DirectAyahJump | null {
+  const query = normalizeSearchText(rawQuery);
+  if (!query) return null;
+
+  const numericMatch = query.match(/^(\d{1,3})\s*[:.\-/, ]\s*(\d{1,3})$/);
+  if (numericMatch) {
+    const surahNumber = Number(numericMatch[1]);
+    const ayahNumber = Number(numericMatch[2]);
+    const surah = getSurahByNumber(surahNumber);
+    if (surah && isValidAyahReference(surahNumber, ayahNumber)) {
+      return { surahNumber, ayahNumber, label: `${surah.englishName} ${surahNumber}:${ayahNumber}` };
+    }
+  }
+
+  const trailingAyahMatch = query.match(/(.+?)\s+(\d{1,3})$/);
+  if (trailingAyahMatch) {
+    const surahQuery = trailingAyahMatch[1].trim();
+    const ayahNumber = Number(trailingAyahMatch[2]);
+    const surah = SURAH_LIST.find((item) => {
+      const englishName = normalizeSearchText(item.englishName);
+      const translation = normalizeSearchText(item.englishNameTranslation);
+      const arabicName = normalizeSearchText(item.name);
+      return englishName.includes(surahQuery) || surahQuery.includes(englishName) || translation.includes(surahQuery) || arabicName.includes(surahQuery);
+    });
+    if (surah && isValidAyahReference(surah.number, ayahNumber)) {
+      return { surahNumber: surah.number, ayahNumber, label: `${surah.englishName} ${surah.number}:${ayahNumber}` };
+    }
+  }
+
+  return null;
+}
+
+function searchFullQuran(ayahs: FullSearchAyah[], rawQuery: string) {
+  const query = normalizeSearchText(rawQuery);
+  if (query.length < 2) return [];
+
+  const words = query.split(' ').filter(Boolean);
+
+  return ayahs
+    .map((ayah) => {
+      const arabic = normalizeSearchText(ayah.arabic);
+      const translation = normalizeSearchText(ayah.translation);
+      const surahEnglish = normalizeSearchText(ayah.surahEnglishName);
+      const surahArabic = normalizeSearchText(ayah.surahArabicName);
+      const reference = `${ayah.surahNumber}:${ayah.ayahNumber}`;
+      const searchable = `${arabic} ${translation} ${surahEnglish} ${surahArabic} ${reference}`;
+
+      let score = 0;
+      if (reference === query) score += 100;
+      if (arabic.includes(query)) score += 70;
+      if (translation.includes(query)) score += 55;
+      if (surahEnglish.includes(query) || surahArabic.includes(query)) score += 25;
+      score += words.every((word) => searchable.includes(word)) ? 15 : 0;
+      score += words.reduce((total, word) => total + (searchable.includes(word) ? 2 : 0), 0);
+
+      return { ayah, score };
+    })
+    .filter((item) => item.score > 0)
+    .sort((a, b) => b.score - a.score || a.ayah.surahNumber - b.ayah.surahNumber || a.ayah.ayahNumber - b.ayah.ayahNumber)
+    .slice(0, 80)
+    .map((item) => item.ayah);
+}
+
 export default function QuranScreen({
   currentSurah,
   currentAyah,
@@ -106,6 +223,11 @@ export default function QuranScreen({
   const [copiedAyah, setCopiedAyah] = useState<number | null>(null);
   const [showFontSettings, setShowFontSettings] = useState(false);
   const [studyAyah, setStudyAyah] = useState<AyahData | null>(null);
+  const [fullQuranAyahs, setFullQuranAyahs] = useState<FullSearchAyah[]>([]);
+  const [fullQuranEdition, setFullQuranEdition] = useState(settings.translation_edition || 'en.sahih');
+  const [fullSearchEnabled, setFullSearchEnabled] = useState(false);
+  const [fullSearchLoading, setFullSearchLoading] = useState(false);
+  const [fullSearchError, setFullSearchError] = useState('');
   const selectedAyahRef = useRef<HTMLDivElement | null>(null);
 
   const activeSurahMeta = SURAH_LIST.find((surah) => surah.number === activeSurah) || SURAH_LIST[0];
@@ -125,16 +247,40 @@ export default function QuranScreen({
   }, [searchQuery]);
 
   const filteredCurrentAyahs = useMemo(() => {
-    const query = searchQuery.trim().toLowerCase();
+    const query = normalizeSearchText(searchQuery);
     if (!query) return [];
     return ayahs.filter((ayah) => {
+      const arabic = normalizeSearchText(ayah.text);
+      const translation = normalizeSearchText(ayah.translation);
       return (
-        ayah.text.includes(searchQuery.trim()) ||
-        ayah.translation.toLowerCase().includes(query) ||
-        String(ayah.numberInSurah).includes(query)
+        arabic.includes(query) ||
+        translation.includes(query) ||
+        String(ayah.numberInSurah).includes(query) ||
+        `${activeSurah}:${ayah.numberInSurah}`.includes(query)
       );
     });
-  }, [ayahs, searchQuery]);
+  }, [activeSurah, ayahs, searchQuery]);
+
+  const filteredJuz = useMemo(() => {
+    const query = normalizeSearchText(searchQuery);
+    if (!query) return JUZ_LIST;
+    return JUZ_LIST.filter((juz) => {
+      const startSurah = getSurahByNumber(juz.startSurah);
+      return (
+        String(juz.index).includes(query) ||
+        normalizeSearchText(juz.name).includes(query) ||
+        normalizeSearchText(startSurah?.englishName || '').includes(query) ||
+        normalizeSearchText(startSurah?.name || '').includes(query)
+      );
+    });
+  }, [searchQuery]);
+
+  const directJump = useMemo(() => parseDirectAyahJump(searchQuery), [searchQuery]);
+
+  const fullSearchResults = useMemo(() => {
+    if (!fullSearchEnabled || fullQuranEdition !== (settings.translation_edition || 'en.sahih')) return [];
+    return searchFullQuran(fullQuranAyahs, searchQuery);
+  }, [fullQuranAyahs, fullQuranEdition, fullSearchEnabled, searchQuery, settings.translation_edition]);
 
   useEffect(() => {
     if (isPlaying && currentSurah) {
@@ -144,6 +290,11 @@ export default function QuranScreen({
       setViewTab('reading');
     }
   }, [currentSurah, currentAyah, isPlaying]);
+
+  useEffect(() => {
+    setFullSearchEnabled(false);
+    setFullSearchError('');
+  }, [settings.translation_edition]);
 
   useEffect(() => {
     if (viewTab !== 'reading') return;
@@ -220,6 +371,67 @@ export default function QuranScreen({
     setTargetAyah(ayah);
     setSelectedAyah(ayah);
     setViewTab('reading');
+  };
+
+  const handleSearchEntireQuran = async () => {
+    const query = searchQuery.trim();
+    if (query.length < 2) {
+      setFullSearchError('Type at least 2 letters or an ayah reference first.');
+      return;
+    }
+
+    const edition = settings.translation_edition || 'en.sahih';
+    setFullSearchError('');
+    setFullSearchEnabled(true);
+
+    if (fullQuranAyahs.length > 0 && fullQuranEdition === edition) return;
+
+    setFullSearchLoading(true);
+    try {
+      const [arabicResponse, translationResponse] = await Promise.all([
+        fetch('https://api.alquran.cloud/v1/quran/quran-uthmani'),
+        fetch(`https://api.alquran.cloud/v1/quran/${edition}`),
+      ]);
+
+      if (!arabicResponse.ok || !translationResponse.ok) {
+        throw new Error('The Quran search service did not respond correctly.');
+      }
+
+      const [arabicJson, translationJson] = (await Promise.all([
+        arabicResponse.json(),
+        translationResponse.json(),
+      ])) as [QuranFullApiResponse, QuranFullApiResponse];
+
+      const arabicSurahs = arabicJson.data?.surahs || [];
+      const translationSurahs = translationJson.data?.surahs || [];
+
+      if (!arabicSurahs.length) {
+        throw new Error('Full Quran search data could not be loaded.');
+      }
+
+      const translationBySurah = new Map<number, QuranApiAyah[]>();
+      translationSurahs.forEach((surah) => translationBySurah.set(surah.number, surah.ayahs || []));
+
+      const nextFullAyahs: FullSearchAyah[] = arabicSurahs.flatMap((surah) => {
+        const meta = getSurahByNumber(surah.number);
+        const translations = translationBySurah.get(surah.number) || [];
+        return (surah.ayahs || []).map((ayah, index) => ({
+          surahNumber: surah.number,
+          ayahNumber: ayah.numberInSurah,
+          arabic: ayah.text,
+          translation: translations[index]?.text || '',
+          surahEnglishName: meta?.englishName || `Surah ${surah.number}`,
+          surahArabicName: meta?.name || '',
+        }));
+      });
+
+      setFullQuranAyahs(nextFullAyahs);
+      setFullQuranEdition(edition);
+    } catch (err) {
+      setFullSearchError(err instanceof Error ? err.message : 'Unable to search the full Quran right now.');
+    } finally {
+      setFullSearchLoading(false);
+    }
   };
 
   const handleSelectAyah = (ayahNumber: number) => {
@@ -474,43 +686,154 @@ export default function QuranScreen({
 
         {viewTab === 'search' && (
           <div className="space-y-4">
-            <div className="relative">
-              <Search className={`w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 ${theme.muted}`} />
-              <input
-                value={searchQuery}
-                onChange={(event) => setSearchQuery(event.target.value)}
-                placeholder="Search surah name, number, Arabic name, or loaded ayahs"
-                className={`w-full pl-11 pr-4 py-3.5 rounded-2xl border outline-none focus:ring-2 focus:ring-emerald-500/30 ${theme.input}`}
-              />
+            <div className={`p-5 rounded-3xl border ${theme.card}`}>
+              <div className="flex items-start justify-between gap-3 mb-4">
+                <div>
+                  <p className="text-xs uppercase tracking-widest font-extrabold text-emerald-500">Quran Smart Search</p>
+                  <h2 className="text-2xl font-extrabold mt-1">Find Surah, Juz, or Ayah</h2>
+                  <p className={`text-sm mt-1 ${theme.muted}`}>Try “2:255”, “Al-Kahf 10”, “الكرسي”, “mercy”, or “Juz 30”.</p>
+                </div>
+                <Search className="w-6 h-6 text-emerald-500 flex-shrink-0" />
+              </div>
+              <div className="relative">
+                <Search className={`w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 ${theme.muted}`} />
+                <input
+                  value={searchQuery}
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                  placeholder="Search Arabic, translation, surah, juz, or 2:255"
+                  className={`w-full pl-11 pr-4 py-3.5 rounded-2xl border outline-none focus:ring-2 focus:ring-emerald-500/30 ${theme.input}`}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3 mt-4">
+                <button
+                  onClick={handleSearchEntireQuran}
+                  disabled={fullSearchLoading || searchQuery.trim().length < 2}
+                  className="py-3 rounded-2xl bg-emerald-600 disabled:opacity-50 text-white text-xs font-extrabold active:scale-95"
+                >
+                  {fullSearchLoading ? 'Searching...' : 'Search Full Quran'}
+                </button>
+                <button
+                  onClick={() => { setSearchQuery(''); setFullSearchEnabled(false); setFullSearchError(''); }}
+                  className={`py-3 rounded-2xl border text-xs font-extrabold active:scale-95 ${theme.softCard}`}
+                >
+                  Clear Search
+                </button>
+              </div>
             </div>
-            <div className={`p-4 rounded-2xl border ${theme.softCard}`}>
-              <p className="text-xs leading-relaxed">
-                Search covers surah names immediately. Ayah text search works for the currently loaded surah after you open it once.
-              </p>
-            </div>
-            {filteredCurrentAyahs.length > 0 && (
+
+            {directJump && (
+              <button
+                onClick={() => openSurah(directJump.surahNumber, directJump.ayahNumber)}
+                className="w-full p-4 rounded-2xl bg-emerald-600 text-white text-left shadow-lg active:scale-[0.99]"
+              >
+                <p className="text-xs uppercase tracking-widest font-extrabold text-emerald-100">Direct ayah jump</p>
+                <p className="text-lg font-extrabold mt-1">Open {directJump.label}</p>
+              </button>
+            )}
+
+            {fullSearchError && (
+              <div className={`p-4 rounded-2xl border ${isLightMode ? 'bg-amber-50 border-amber-200 text-amber-700' : 'bg-amber-950/30 border-amber-700/50 text-amber-200'}`}>
+                <div className="flex items-start gap-2">
+                  <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+                  <p className="text-sm leading-relaxed">{fullSearchError}</p>
+                </div>
+              </div>
+            )}
+
+            {fullSearchLoading && (
+              <div className={`p-6 rounded-3xl border text-center ${theme.card}`}>
+                <Loader2 className="w-9 h-9 mx-auto text-emerald-500 animate-spin mb-3" />
+                <p className="font-extrabold">Loading full Quran search index...</p>
+                <p className={`text-sm mt-1 ${theme.muted}`}>This may take a moment the first time.</p>
+              </div>
+            )}
+
+            {fullSearchEnabled && !fullSearchLoading && fullSearchResults.length > 0 && (
               <div className="space-y-2">
-                <p className="text-xs font-extrabold uppercase tracking-widest text-emerald-500">Loaded ayah matches</p>
-                {filteredCurrentAyahs.map((ayah) => (
-                  <button key={ayah.number} onClick={() => openSurah(activeSurah, ayah.numberInSurah)} className={`w-full p-4 rounded-2xl border text-left ${theme.card}`}>
-                    <p className="font-extrabold">{activeSurahMeta.englishName} {activeSurah}:{ayah.numberInSurah}</p>
-                    <p className={`text-xs line-clamp-2 ${theme.muted}`}>{ayah.translation}</p>
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-xs font-extrabold uppercase tracking-widest text-emerald-500">Full Quran ayah matches</p>
+                  <span className={`text-[11px] font-bold ${theme.muted}`}>{fullSearchResults.length} shown</span>
+                </div>
+                {fullSearchResults.map((ayah) => (
+                  <button
+                    key={`${ayah.surahNumber}:${ayah.ayahNumber}`}
+                    onClick={() => openSurah(ayah.surahNumber, ayah.ayahNumber)}
+                    className={`w-full p-4 rounded-2xl border text-left transition-all active:scale-[0.99] ${theme.card} ${theme.hover}`}
+                  >
+                    <div className="flex items-center justify-between gap-3 mb-3">
+                      <div className="min-w-0">
+                        <p className="font-extrabold truncate">{ayah.surahEnglishName} {ayah.surahNumber}:{ayah.ayahNumber}</p>
+                        <p className={`text-xs truncate ${theme.muted}`}>Tap to open directly</p>
+                      </div>
+                      <span className="font-quran text-xl text-emerald-500">{ayah.surahArabicName}</span>
+                    </div>
+                    <p className="font-quran text-right text-gold leading-loose line-clamp-2" dir="rtl">{ayah.arabic}</p>
+                    {ayah.translation && <p className={`text-xs mt-2 leading-relaxed line-clamp-2 ${theme.muted}`}>{ayah.translation}</p>}
                   </button>
                 ))}
               </div>
             )}
+
+            {fullSearchEnabled && !fullSearchLoading && searchQuery.trim().length >= 2 && fullQuranAyahs.length > 0 && fullSearchResults.length === 0 && (
+              <div className={`p-6 rounded-3xl border text-center ${theme.card}`}>
+                <p className="font-extrabold">No full Quran matches found</p>
+                <p className={`text-sm mt-1 ${theme.muted}`}>Try a different spelling, Arabic without harakat, or a reference like 2:255.</p>
+              </div>
+            )}
+
+            {filteredCurrentAyahs.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-xs font-extrabold uppercase tracking-widest text-emerald-500">Current loaded surah matches</p>
+                {filteredCurrentAyahs.map((ayah) => (
+                  <button key={ayah.number} onClick={() => openSurah(activeSurah, ayah.numberInSurah)} className={`w-full p-4 rounded-2xl border text-left ${theme.card} ${theme.hover}`}>
+                    <p className="font-extrabold">{activeSurahMeta.englishName} {activeSurah}:{ayah.numberInSurah}</p>
+                    <p className="font-quran text-right text-gold leading-loose line-clamp-2 mt-2" dir="rtl">{ayah.text}</p>
+                    <p className={`text-xs line-clamp-2 mt-2 ${theme.muted}`}>{ayah.translation}</p>
+                  </button>
+                ))}
+              </div>
+            )}
+
             <div className="space-y-2">
               <p className="text-xs font-extrabold uppercase tracking-widest text-emerald-500">Surah matches</p>
-              {filteredSurahs.map((surah) => (
-                <button key={surah.number} onClick={() => openSurah(surah.number, 1)} className={`w-full p-4 rounded-2xl border text-left ${theme.card}`}>
+              {filteredSurahs.length === 0 ? (
+                <div className={`p-4 rounded-2xl border ${theme.softCard}`}>
+                  <p className="text-sm">No surah name matches.</p>
+                </div>
+              ) : filteredSurahs.slice(0, searchQuery.trim() ? 25 : 114).map((surah) => (
+                <button key={surah.number} onClick={() => openSurah(surah.number, 1)} className={`w-full p-4 rounded-2xl border text-left ${theme.card} ${theme.hover}`}>
                   <div className="flex items-center justify-between gap-3">
                     <span className="font-extrabold">{surah.number}. {surah.englishName}</span>
                     <span className="font-quran text-xl text-emerald-500">{surah.name}</span>
                   </div>
-                  <p className={`text-xs ${theme.muted}`}>{surah.englishNameTranslation}</p>
+                  <p className={`text-xs ${theme.muted}`}>{surah.englishNameTranslation} • {surah.numberOfAyahs} ayahs</p>
                 </button>
               ))}
             </div>
+
+            {searchQuery.trim() && (
+              <div className="space-y-2">
+                <p className="text-xs font-extrabold uppercase tracking-widest text-emerald-500">Juz matches</p>
+                {filteredJuz.length === 0 ? (
+                  <div className={`p-4 rounded-2xl border ${theme.softCard}`}>
+                    <p className="text-sm">No Juz matches.</p>
+                  </div>
+                ) : filteredJuz.slice(0, 10).map((juz) => {
+                  const startSurah = getSurahByNumber(juz.startSurah) || SURAH_LIST[0];
+                  return (
+                    <button key={juz.index} onClick={() => openSurah(juz.startSurah, juz.startAyah)} className={`w-full p-4 rounded-2xl border text-left ${theme.card} ${theme.hover}`}>
+                      <div className="flex items-center justify-between gap-4">
+                        <div>
+                          <p className="font-extrabold">Juz' {juz.index}</p>
+                          <p className={`text-xs ${theme.muted}`}>{juz.name} • starts at {startSurah.englishName} {juz.startSurah}:{juz.startAyah}</p>
+                        </div>
+                        <span className="text-xs font-bold text-emerald-500 bg-emerald-500/10 px-3 py-1.5 rounded-xl">Page {juz.startPage}</span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
 
