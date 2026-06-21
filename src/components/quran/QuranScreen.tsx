@@ -74,7 +74,45 @@ interface DirectAyahJump {
   label: string;
 }
 
-type ViewTab = 'surahs' | 'juz' | 'bookmarks' | 'search' | 'reading';
+interface PersonalAyahNote {
+  id: string;
+  surah: number;
+  ayah: number;
+  note: string;
+  color: 'emerald' | 'amber' | 'sky' | 'rose';
+  createdAt: string;
+  updatedAt: string;
+}
+
+const NOTES_STORAGE_KEY = 'noor_personal_ayah_notes';
+
+function getAyahNoteId(surah: number, ayah: number) {
+  return `${surah}:${ayah}`;
+}
+
+function loadPersonalNotes(): PersonalAyahNote[] {
+  try {
+    const raw = localStorage.getItem(NOTES_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function savePersonalNotes(notes: PersonalAyahNote[]) {
+  localStorage.setItem(NOTES_STORAGE_KEY, JSON.stringify(notes));
+}
+
+function getNoteColorClasses(color: PersonalAyahNote['color']) {
+  if (color === 'amber') return 'border-amber-500/40 bg-amber-500/10 text-amber-200';
+  if (color === 'sky') return 'border-sky-500/40 bg-sky-500/10 text-sky-200';
+  if (color === 'rose') return 'border-rose-500/40 bg-rose-500/10 text-rose-200';
+  return 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200';
+}
+
+type ViewTab = 'surahs' | 'juz' | 'bookmarks' | 'notes' | 'search' | 'reading';
 type DisplayMode = 'verse' | 'compact';
 
 function getThemeClasses(isLightMode: boolean) {
@@ -228,6 +266,10 @@ export default function QuranScreen({
   const [fullSearchEnabled, setFullSearchEnabled] = useState(false);
   const [fullSearchLoading, setFullSearchLoading] = useState(false);
   const [fullSearchError, setFullSearchError] = useState('');
+  const [personalNotes, setPersonalNotes] = useState<PersonalAyahNote[]>(() => loadPersonalNotes());
+  const [noteEditorAyah, setNoteEditorAyah] = useState<AyahData | null>(null);
+  const [noteDraft, setNoteDraft] = useState('');
+  const [noteColor, setNoteColor] = useState<PersonalAyahNote['color']>('emerald');
   const selectedAyahRef = useRef<HTMLDivElement | null>(null);
 
   const activeSurahMeta = SURAH_LIST.find((surah) => surah.number === activeSurah) || SURAH_LIST[0];
@@ -486,6 +528,51 @@ export default function QuranScreen({
     await handleCopy(ayah);
   };
 
+  const openNoteEditor = (ayah: AyahData) => {
+    const existing = personalNotes.find((note) => note.surah === activeSurah && note.ayah === ayah.numberInSurah);
+    setNoteEditorAyah(ayah);
+    setNoteDraft(existing?.note || '');
+    setNoteColor(existing?.color || 'emerald');
+  };
+
+  const savePersonalNote = () => {
+    if (!noteEditorAyah) return;
+    const noteText = noteDraft.trim();
+    const id = getAyahNoteId(activeSurah, noteEditorAyah.numberInSurah);
+    const now = new Date().toISOString();
+
+    const nextNotes = noteText
+      ? [
+          ...personalNotes.filter((note) => note.id !== id),
+          {
+            id,
+            surah: activeSurah,
+            ayah: noteEditorAyah.numberInSurah,
+            note: noteText,
+            color: noteColor,
+            createdAt: personalNotes.find((note) => note.id === id)?.createdAt || now,
+            updatedAt: now,
+          },
+        ]
+      : personalNotes.filter((note) => note.id !== id);
+
+    const sortedNotes = nextNotes.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    setPersonalNotes(sortedNotes);
+    savePersonalNotes(sortedNotes);
+    setNoteEditorAyah(null);
+    setNoteDraft('');
+  };
+
+  const deletePersonalNote = (surah: number, ayah: number) => {
+    const nextNotes = personalNotes.filter((note) => !(note.surah === surah && note.ayah === ayah));
+    setPersonalNotes(nextNotes);
+    savePersonalNotes(nextNotes);
+    if (noteEditorAyah && activeSurah === surah && noteEditorAyah.numberInSurah === ayah) {
+      setNoteEditorAyah(null);
+      setNoteDraft('');
+    }
+  };
+
   const updateFontSize = (field: 'arabic_font_size' | 'translation_font_size', delta: number) => {
     const currentValue = settings[field];
     const nextValue = Math.min(field === 'arabic_font_size' ? 44 : 24, Math.max(field === 'arabic_font_size' ? 20 : 12, currentValue + delta));
@@ -545,13 +632,13 @@ export default function QuranScreen({
 
         {viewTab !== 'reading' && (
           <div className="flex gap-1 mt-4 overflow-x-auto no-scrollbar text-xs font-bold">
-            {(['surahs', 'juz', 'bookmarks', 'search'] as const).map((tab) => (
+            {(['surahs', 'juz', 'bookmarks', 'notes', 'search'] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setViewTab(tab)}
                 className={`px-4 py-2 rounded-xl capitalize whitespace-nowrap transition-all ${viewTab === tab ? 'bg-emerald-600 text-white shadow' : theme.softCard}`}
               >
-                {tab === 'juz' ? "Juz'" : tab}
+                {tab === 'juz' ? "Juz'" : tab === 'notes' ? 'Notes' : tab}
               </button>
             ))}
           </div>
@@ -676,6 +763,38 @@ export default function QuranScreen({
                       <button onClick={() => handleRemoveBookmark(bookmark.id)} className="p-2 rounded-xl bg-rose-500/10 text-rose-500 active:scale-95" aria-label="Remove bookmark">
                         <Trash2 className="w-4 h-4" />
                       </button>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        )}
+
+        {viewTab === 'notes' && (
+          <div className="space-y-3">
+            {personalNotes.length === 0 ? (
+              <div className={`p-8 rounded-3xl border text-center ${theme.card}`}>
+                <Tag className="w-10 h-10 mx-auto text-emerald-500 mb-3" />
+                <p className="font-extrabold">No personal notes yet</p>
+                <p className={`text-sm mt-1 ${theme.muted}`}>Open any ayah, tap Note, and save your reflection or revision reminder.</p>
+              </div>
+            ) : (
+              personalNotes.map((note) => {
+                const surah = SURAH_LIST.find((item) => item.number === note.surah) || SURAH_LIST[0];
+                return (
+                  <div key={note.id} className={`p-4 rounded-2xl border ${theme.card}`}>
+                    <div className="flex items-start justify-between gap-3">
+                      <button onClick={() => openSurah(note.surah, note.ayah)} className="text-left min-w-0 flex-1">
+                        <p className="font-extrabold truncate">{surah.englishName} {note.surah}:{note.ayah}</p>
+                        <p className={`text-xs mt-1 ${theme.muted}`}>Updated {new Date(note.updatedAt).toLocaleDateString()}</p>
+                      </button>
+                      <button onClick={() => deletePersonalNote(note.surah, note.ayah)} className="p-2 rounded-xl bg-rose-500/10 text-rose-500 active:scale-95" aria-label="Delete note">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                    <div className={`mt-3 p-3 rounded-2xl border text-sm leading-relaxed ${getNoteColorClasses(note.color)}`}>
+                      {note.note}
                     </div>
                   </div>
                 );
@@ -876,6 +995,7 @@ export default function QuranScreen({
             {!loading && !error && ayahs.map((ayah) => {
               const isSelected = selectedAyah === ayah.numberInSurah;
               const isBookmarked = bookmarks.some((bookmark) => isSameBookmark(bookmark, activeSurah, ayah.numberInSurah));
+              const existingNote = personalNotes.find((note) => note.surah === activeSurah && note.ayah === ayah.numberInSurah);
               return (
                 <div
                   key={ayah.number}
@@ -908,6 +1028,12 @@ export default function QuranScreen({
                         {ayah.translation}
                       </p>
                     )}
+                    {existingNote && (
+                      <div className={`rounded-2xl border p-3 text-sm leading-relaxed ${getNoteColorClasses(existingNote.color)}`}>
+                        <p className="text-[11px] uppercase tracking-widest font-extrabold opacity-80 mb-1">Personal note</p>
+                        <p>{existingNote.note}</p>
+                      </div>
+                    )}
                   </div>
 
                   {isSelected && (
@@ -917,6 +1043,9 @@ export default function QuranScreen({
                       </button>
                       <button onClick={(event) => { event.stopPropagation(); handleAddBookmark(ayah.numberInSurah); }} className={`flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs font-bold active:scale-95 ${isBookmarked ? 'bg-emerald-600/20 text-emerald-500' : theme.softCard}`}>
                         <BookmarkIcon className="w-4 h-4" /> {isBookmarked ? 'Saved' : 'Bookmark'}
+                      </button>
+                      <button onClick={(event) => { event.stopPropagation(); openNoteEditor(ayah); }} className={`flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs font-bold active:scale-95 ${existingNote ? 'bg-amber-500/15 text-amber-500' : theme.softCard}`}>
+                        <Tag className="w-4 h-4" /> {existingNote ? 'Note saved' : 'Note'}
                       </button>
                       <button onClick={(event) => { event.stopPropagation(); handleCopy(ayah); }} className={`flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs font-bold active:scale-95 ${theme.softCard}`}>
                         {copiedAyah === ayah.numberInSurah ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />} {copiedAyah === ayah.numberInSurah ? 'Copied' : 'Copy'}
@@ -935,6 +1064,54 @@ export default function QuranScreen({
           </div>
         )}
       </div>
+
+      {noteEditorAyah && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className={`w-full max-w-md rounded-3xl p-6 space-y-4 shadow-2xl border ${isLightMode ? 'bg-white border-slate-200 text-slate-900' : 'bg-slate-900 border-slate-700 text-white'}`}>
+            <div className="flex items-center justify-between gap-3 pb-3 border-b border-slate-700/30">
+              <div className="flex items-center gap-2">
+                <Tag className="w-5 h-5 text-amber-500" />
+                <span className="font-extrabold">Personal ayah note</span>
+              </div>
+              <span className="text-xs font-bold text-emerald-500 bg-emerald-500/10 px-3 py-1 rounded-xl">{activeSurah}:{noteEditorAyah.numberInSurah}</span>
+            </div>
+            <p className="font-quran text-right text-gold leading-loose max-h-32 overflow-y-auto" dir="rtl" style={{ fontSize: `${Math.max(settings.arabic_font_size, 28)}px` }}>
+              {noteEditorAyah.text}
+            </p>
+            <textarea
+              value={noteDraft}
+              onChange={(event) => setNoteDraft(event.target.value)}
+              placeholder="Write your reflection, revision reminder, or lesson from this ayah..."
+              className={`w-full min-h-32 rounded-2xl border p-4 outline-none focus:ring-2 focus:ring-emerald-500 ${theme.input}`}
+            />
+            <div>
+              <p className={`text-xs font-extrabold uppercase tracking-widest mb-2 ${theme.muted}`}>Note color</p>
+              <div className="grid grid-cols-4 gap-2">
+                {(['emerald', 'amber', 'sky', 'rose'] as const).map((color) => (
+                  <button
+                    key={color}
+                    onClick={() => setNoteColor(color)}
+                    className={`py-2 rounded-xl border text-xs font-bold capitalize ${noteColor === color ? 'ring-2 ring-emerald-500' : ''} ${getNoteColorClasses(color)}`}
+                  >
+                    {color}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <button onClick={() => { setNoteEditorAyah(null); setNoteDraft(''); }} className={`py-3 rounded-2xl font-bold text-sm ${theme.softCard}`}>
+                Cancel
+              </button>
+              <button onClick={() => deletePersonalNote(activeSurah, noteEditorAyah.numberInSurah)} className="py-3 rounded-2xl bg-rose-600/15 text-rose-500 font-bold text-sm">
+                Delete
+              </button>
+              <button onClick={savePersonalNote} className="py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm transition-all active:scale-95">
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {studyAyah && (
         <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
