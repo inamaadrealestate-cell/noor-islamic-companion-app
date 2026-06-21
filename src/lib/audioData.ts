@@ -362,17 +362,60 @@ export const RECITERS_LIST: Reciter[] = [
 
 export const AUDIO_CACHE_NAME = "noor-quran-audio-v1";
 
+export interface AudioSourceCandidate {
+  url: string;
+  reciterId: string;
+  reciterName: string;
+  isFallback: boolean;
+}
+
+export const VERIFIED_AUDIO_FALLBACK_RECITER_IDS = [
+  "ar.alafasy",
+  "ar.muhammad-ayyub",
+  "ar.abdullah-matroud",
+  "ar.ali-jaber",
+];
+
 export function getReciterById(reciterId: string): Reciter {
   return RECITERS_LIST.find((reciter) => reciter.id === reciterId) || RECITERS_LIST[0];
 }
 
-export function getVerseAudioUrl(reciterId: string, surah: number, ayah: number): string {
-  const reciter = getReciterById(reciterId);
+function buildEveryAyahUrl(reciter: Reciter, surah: number, ayah: number): string {
   const safeSurah = Math.max(1, Math.min(114, Math.trunc(surah || 1)));
   const safeAyah = Math.max(1, Math.trunc(ayah || 1));
   const sStr = safeSurah.toString().padStart(3, "0");
   const aStr = safeAyah.toString().padStart(3, "0");
   return `${reciter.server}${sStr}${aStr}.mp3`;
+}
+
+export function getVerseAudioUrl(reciterId: string, surah: number, ayah: number): string {
+  return buildEveryAyahUrl(getReciterById(reciterId), surah, ayah);
+}
+
+export function getVerseAudioFallbackUrls(
+  reciterId: string,
+  surah: number,
+  ayah: number,
+): AudioSourceCandidate[] {
+  const orderedIds = [
+    reciterId,
+    ...VERIFIED_AUDIO_FALLBACK_RECITER_IDS.filter((id) => id !== reciterId),
+  ];
+
+  const seenUrls = new Set<string>();
+  return orderedIds
+    .map((id) => getReciterById(id))
+    .map((reciter, index) => ({
+      url: buildEveryAyahUrl(reciter, surah, ayah),
+      reciterId: reciter.id,
+      reciterName: reciter.name,
+      isFallback: index > 0,
+    }))
+    .filter((candidate) => {
+      if (seenUrls.has(candidate.url)) return false;
+      seenUrls.add(candidate.url);
+      return true;
+    });
 }
 
 export function getAudioDownloadKey(reciterId: string, surah: number, ayah: number): string {

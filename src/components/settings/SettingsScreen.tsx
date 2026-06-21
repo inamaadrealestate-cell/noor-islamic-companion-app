@@ -25,7 +25,7 @@ import {
   UserSettings,
   getDeviceId,
 } from "../../lib/supabase";
-import { RECITERS_LIST } from "../../lib/audioData";
+import { AUDIO_CACHE_NAME, RECITERS_LIST } from "../../lib/audioData";
 import {
   getAdhkarReminderSettings,
   getPrayerNotificationStatus,
@@ -58,6 +58,8 @@ const STORAGE_KEYS = {
   prayerLocation: "noor_prayer_location",
   qiblaLocation: "noor_qibla_location",
 };
+
+const QURAN_SURAH_CACHE_PREFIX = "noor_quran_surah_cache_v1";
 
 const TRANSLATIONS = [
   {
@@ -152,6 +154,7 @@ function estimateStorageUsage(): {
   bytes: number;
   downloads: number;
   adhkarDays: number;
+  cachedSurahs: number;
 } {
   const keys = getNoorStorageKeys();
   const bytes = keys.reduce(
@@ -163,6 +166,8 @@ function estimateStorageUsage(): {
     bytes,
     downloads: keys.filter((key) => key.startsWith("download_")).length,
     adhkarDays: keys.filter((key) => key.startsWith("noor_adhkar_")).length,
+    cachedSurahs: keys.filter((key) => key.startsWith(QURAN_SURAH_CACHE_PREFIX))
+      .length,
   };
 }
 
@@ -177,7 +182,8 @@ export default function SettingsScreen({
   const [notificationStatus, setNotificationStatus] =
     useState<NoorNotificationStatus>(() => getPrayerNotificationStatus());
   const [notificationTesting, setNotificationTesting] = useState(false);
-  const [reminderSettings, setReminderSettings] = useState<NoorAdhkarReminderSettings>(() => getAdhkarReminderSettings());
+  const [reminderSettings, setReminderSettings] =
+    useState<NoorAdhkarReminderSettings>(() => getAdhkarReminderSettings());
   const [reminderTesting, setReminderTesting] = useState(false);
   const [reciterSearch, setReciterSearch] = useState("");
   const importInputRef = useRef<HTMLInputElement | null>(null);
@@ -228,8 +234,15 @@ export default function SettingsScreen({
       setReminderSettings(getAdhkarReminderSettings());
     };
 
-    window.addEventListener("noor-adhkar-reminders-changed", handleReminderChange);
-    return () => window.removeEventListener("noor-adhkar-reminders-changed", handleReminderChange);
+    window.addEventListener(
+      "noor-adhkar-reminders-changed",
+      handleReminderChange,
+    );
+    return () =>
+      window.removeEventListener(
+        "noor-adhkar-reminders-changed",
+        handleReminderChange,
+      );
   }, []);
 
   const pageClasses = isLightMode
@@ -260,12 +273,27 @@ export default function SettingsScreen({
     showNotice(message);
   };
 
-  const handleClearDownloadCache = () => {
+  const handleClearDownloadCache = async () => {
     getNoorStorageKeys()
       .filter((key) => key.startsWith("download_"))
       .forEach(safeLocalRemove);
+
+    if ("caches" in window) {
+      try {
+        await caches.delete(AUDIO_CACHE_NAME);
+      } catch {}
+    }
+
     setStorageStats(estimateStorageUsage());
-    showNotice("Audio download cache flags cleared");
+    showNotice("Offline audio cache cleared");
+  };
+
+  const handleClearQuranTextCache = () => {
+    getNoorStorageKeys()
+      .filter((key) => key.startsWith(QURAN_SURAH_CACHE_PREFIX))
+      .forEach(safeLocalRemove);
+    setStorageStats(estimateStorageUsage());
+    showNotice("Offline Quran text cache cleared");
   };
 
   const handleResetSettings = () => {
@@ -775,7 +803,8 @@ export default function SettingsScreen({
                 {selectedReciter.name}
               </p>
               <p className={`text-xs ${mutedText}`}>
-                {selectedReciter.arabicName} • {selectedReciter.style} • {selectedReciter.bitrate}
+                {selectedReciter.arabicName} • {selectedReciter.style} •{" "}
+                {selectedReciter.bitrate}
               </p>
             </div>
           </div>
@@ -784,7 +813,9 @@ export default function SettingsScreen({
             <label className="text-xs font-extrabold uppercase tracking-wider text-emerald-500">
               Search default reciter
             </label>
-            <div className={`mt-2 flex items-center gap-2 rounded-2xl border px-3 py-2 ${inputClasses}`}>
+            <div
+              className={`mt-2 flex items-center gap-2 rounded-2xl border px-3 py-2 ${inputClasses}`}
+            >
               <Search className="w-4 h-4 text-emerald-500 flex-shrink-0" />
               <input
                 type="search"
@@ -797,9 +828,13 @@ export default function SettingsScreen({
 
             <div className="mt-3 max-h-80 overflow-y-auto no-scrollbar space-y-2 pr-1">
               {filteredReciters.length === 0 ? (
-                <div className={`rounded-2xl border p-4 text-center ${softPanel}`}>
+                <div
+                  className={`rounded-2xl border p-4 text-center ${softPanel}`}
+                >
                   <p className="text-sm font-extrabold">No reciter found</p>
-                  <p className={`text-xs mt-1 ${mutedText}`}>Try another name or spelling.</p>
+                  <p className={`text-xs mt-1 ${mutedText}`}>
+                    Try another name or spelling.
+                  </p>
                 </div>
               ) : (
                 filteredReciters.map((reciter) => {
@@ -828,19 +863,27 @@ export default function SettingsScreen({
                         className="w-10 h-10 rounded-xl object-cover flex-shrink-0"
                       />
                       <div className="min-w-0 flex-1">
-                        <p className="text-sm font-extrabold truncate">{reciter.name}</p>
-                        <p className={`text-[11px] truncate ${isSelected ? "text-emerald-50/90" : mutedText}`}>
-                          {reciter.arabicName} • {reciter.style} • {reciter.bitrate}
+                        <p className="text-sm font-extrabold truncate">
+                          {reciter.name}
+                        </p>
+                        <p
+                          className={`text-[11px] truncate ${isSelected ? "text-emerald-50/90" : mutedText}`}
+                        >
+                          {reciter.arabicName} • {reciter.style} •{" "}
+                          {reciter.bitrate}
                         </p>
                       </div>
-                      {isSelected && <Check className="w-4 h-4 flex-shrink-0" />}
+                      {isSelected && (
+                        <Check className="w-4 h-4 flex-shrink-0" />
+                      )}
                     </button>
                   );
                 })
               )}
             </div>
             <p className={`mt-2 text-[11px] ${mutedText}`}>
-              Showing {filteredReciters.length} of {RECITERS_LIST.length} reciters.
+              Showing {filteredReciters.length} of {RECITERS_LIST.length}{" "}
+              reciters.
             </p>
           </div>
         </section>
@@ -917,7 +960,9 @@ export default function SettingsScreen({
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2.5">
               <Bell className="w-5 h-5 text-emerald-400" />
-              <h3 className="font-extrabold text-base">Adhkar Reminder Schedule</h3>
+              <h3 className="font-extrabold text-base">
+                Adhkar Reminder Schedule
+              </h3>
             </div>
             <span
               className={`rounded-xl px-3 py-1 text-[11px] font-black ${
@@ -940,13 +985,15 @@ export default function SettingsScreen({
 
           <ToggleButton
             label="Enable adhkar reminders"
-            enabled={reminderSettings.enabled && notificationStatus === "granted"}
+            enabled={
+              reminderSettings.enabled && notificationStatus === "granted"
+            }
             isLightMode={isLightMode}
             onClick={handleToggleAdhkarReminders}
           />
 
           <div className="space-y-3">
-            {([
+            {[
               {
                 id: "morning" as ReminderSlotId,
                 label: "Morning Adhkar",
@@ -967,7 +1014,7 @@ export default function SettingsScreen({
                 label: "Friday Al-Kahf",
                 note: "Only rings on Fridays",
               },
-            ]).map((slot) => (
+            ].map((slot) => (
               <div
                 key={slot.id}
                 className={`rounded-2xl border p-3 ${softPanel}`}
@@ -975,7 +1022,9 @@ export default function SettingsScreen({
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <p className="text-sm font-extrabold">{slot.label}</p>
-                    <p className={`text-[11px] leading-relaxed ${mutedText}`}>{slot.note}</p>
+                    <p className={`text-[11px] leading-relaxed ${mutedText}`}>
+                      {slot.note}
+                    </p>
                   </div>
                   <button
                     type="button"
@@ -1013,8 +1062,8 @@ export default function SettingsScreen({
               <div>
                 <p className="text-sm font-extrabold">After-prayer adhkar</p>
                 <p className={`text-[11px] leading-relaxed ${mutedText}`}>
-                  Uses your saved Salah city and calculation method, then reminds
-                  after Fajr, Dhuhr, Asr, Maghrib, and Isha.
+                  Uses your saved Salah city and calculation method, then
+                  reminds after Fajr, Dhuhr, Asr, Maghrib, and Isha.
                 </p>
               </div>
               <button
@@ -1074,14 +1123,16 @@ export default function SettingsScreen({
             </button>
           </div>
 
-          <div className={`rounded-2xl border p-3 text-xs leading-relaxed ${
-            isLightMode
-              ? "border-amber-200 bg-amber-50 text-amber-800"
-              : "border-amber-800/40 bg-amber-950/20 text-amber-200"
-          }`}>
-            For full background reliability, install NoorQuran as an app and keep
-            browser notifications allowed. Web browsers may pause reminders when
-            the site has been fully closed for a long time.
+          <div
+            className={`rounded-2xl border p-3 text-xs leading-relaxed ${
+              isLightMode
+                ? "border-amber-200 bg-amber-50 text-amber-800"
+                : "border-amber-800/40 bg-amber-950/20 text-amber-200"
+            }`}
+          >
+            For full background reliability, install NoorQuran as an app and
+            keep browser notifications allowed. Web browsers may pause reminders
+            when the site has been fully closed for a long time.
           </div>
         </section>
 
@@ -1142,13 +1193,19 @@ export default function SettingsScreen({
             <h3 className="font-extrabold text-base">Storage Management</h3>
           </div>
           <div
-            className={`grid grid-cols-2 gap-3 text-center text-xs ${mutedText}`}
+            className={`grid grid-cols-3 gap-3 text-center text-xs ${mutedText}`}
           >
             <div className={`p-3 rounded-2xl border ${softPanel}`}>
               <p className="text-lg font-extrabold text-emerald-500">
                 {storageStats.downloads}
               </p>
-              <p className="font-bold">Download flags</p>
+              <p className="font-bold">Audio ayahs</p>
+            </div>
+            <div className={`p-3 rounded-2xl border ${softPanel}`}>
+              <p className="text-lg font-extrabold text-emerald-500">
+                {storageStats.cachedSurahs}
+              </p>
+              <p className="font-bold">Cached Surahs</p>
             </div>
             <div className={`p-3 rounded-2xl border ${softPanel}`}>
               <p className="text-lg font-extrabold text-emerald-500">
@@ -1157,11 +1214,23 @@ export default function SettingsScreen({
               <p className="font-bold">Estimated usage</p>
             </div>
           </div>
+          <p className={`text-xs leading-relaxed ${mutedText}`}>
+            Quran Surahs are cached automatically after you open them. Audio is
+            cached only when you tap the save icon in the audio player.
+          </p>
           <button
             onClick={handleClearDownloadCache}
             className={`w-full py-3 rounded-2xl font-extrabold text-xs flex items-center justify-center gap-2 border transition-all active:scale-95 ${softPanel}`}
           >
-            <Trash2 className="w-4 h-4 text-red-400" /> Clear Audio Cache Flags
+            <Trash2 className="w-4 h-4 text-red-400" /> Clear Offline Audio
+            Cache
+          </button>
+          <button
+            onClick={handleClearQuranTextCache}
+            className={`w-full py-3 rounded-2xl font-extrabold text-xs flex items-center justify-center gap-2 border transition-all active:scale-95 ${softPanel}`}
+          >
+            <Trash2 className="w-4 h-4 text-red-400" /> Clear Offline Quran Text
+            Cache
           </button>
           <button
             onClick={handleResetSettings}

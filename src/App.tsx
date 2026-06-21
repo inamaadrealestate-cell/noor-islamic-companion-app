@@ -216,8 +216,14 @@ export default function App() {
       >
         {!isOnline && (
           <div className="fixed top-3 left-0 right-0 z-[60] px-4 pointer-events-none">
-            <div className="max-w-lg mx-auto rounded-2xl border border-amber-500/30 bg-amber-500/15 text-amber-200 px-4 py-3 shadow-xl backdrop-blur-md text-xs font-extrabold flex items-center justify-between gap-3">
-              <span>You are offline. Saved data will still work, but live Quran, audio, city search, and prayer updates may pause.</span>
+            <div
+              className={`max-w-lg mx-auto rounded-2xl border px-4 py-3 shadow-xl backdrop-blur-md text-xs font-extrabold flex items-center justify-between gap-3 ${
+                isLightMode
+                  ? "border-amber-300 bg-amber-50/95 text-amber-900"
+                  : "border-amber-500/30 bg-amber-500/15 text-amber-200"
+              }`}
+            >
+              <span>Offline mode. Cached Quran, notes, bookmarks, and saved data can still work.</span>
               <span className="flex-shrink-0">Offline</span>
             </div>
           </div>
