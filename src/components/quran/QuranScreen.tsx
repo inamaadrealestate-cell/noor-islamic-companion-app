@@ -1,7 +1,23 @@
-import { useState, useEffect, useRef } from 'react';
-import { Search, Bookmark as BookmarkIcon, Play, Copy, Share2, BookOpen, Sliders, ArrowLeft, Check, Trash2, Tag } from 'lucide-react';
-import { SURAH_LIST, JUZ_LIST } from '../../lib/surahData';
-import { Storage, Bookmark, UserSettings } from '../../lib/supabase';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  ArrowLeft,
+  Bookmark as BookmarkIcon,
+  BookOpen,
+  Check,
+  Copy,
+  Loader2,
+  Play,
+  Search,
+  Share2,
+  Sliders,
+  Tag,
+  Trash2,
+  AlertCircle,
+  Minus,
+  Plus,
+} from 'lucide-react';
+import { JUZ_LIST, SURAH_LIST } from '../../lib/surahData';
+import { Bookmark, Storage, UserSettings } from '../../lib/supabase';
 
 interface QuranScreenProps {
   currentSurah: number;
@@ -13,13 +29,58 @@ interface QuranScreenProps {
   onUpdateSettings: (newSettings: UserSettings) => void;
 }
 
+interface QuranApiAyah {
+  number: number;
+  numberInSurah: number;
+  text: string;
+}
+
+interface QuranApiSurahResponse {
+  data?: {
+    ayahs?: QuranApiAyah[];
+  };
+}
+
 interface AyahData {
   number: number;
   numberInSurah: number;
   text: string;
   translation: string;
-  tafsir?: string;
-  words?: { arabic: string; translation: string }[];
+}
+
+type ViewTab = 'surahs' | 'juz' | 'bookmarks' | 'search' | 'reading';
+type DisplayMode = 'verse' | 'compact';
+
+function getThemeClasses(isLightMode: boolean) {
+  return {
+    page: isLightMode ? 'bg-slate-50 text-slate-900' : 'bg-slate-900 text-white',
+    header: isLightMode ? 'bg-slate-100/95 border-slate-200' : 'bg-slate-900/95 border-slate-800',
+    card: isLightMode ? 'bg-white border-slate-200 text-slate-900 shadow-sm' : 'bg-slate-800/70 border-slate-700/80 text-white shadow-md',
+    softCard: isLightMode ? 'bg-slate-100 border-slate-200 text-slate-700' : 'bg-slate-800 border-slate-700 text-slate-300',
+    muted: isLightMode ? 'text-slate-500' : 'text-slate-400',
+    strongMuted: isLightMode ? 'text-slate-700' : 'text-slate-200',
+    input: isLightMode ? 'bg-white border-slate-200 text-slate-900 placeholder:text-slate-400' : 'bg-slate-800 border-slate-700 text-white placeholder:text-slate-500',
+    hover: isLightMode ? 'hover:bg-slate-100' : 'hover:bg-slate-700/80',
+  };
+}
+
+function isSameBookmark(bookmark: Bookmark, surah: number, ayah: number) {
+  return bookmark.surah_number === surah && bookmark.ayah_number === ayah;
+}
+
+function getProgressPercent(ayah: number, total: number) {
+  if (!total) return 0;
+  return Math.min(100, Math.max(0, Math.round((ayah / total) * 100)));
+}
+
+function getJuzIndexForSurah(surahNumber: number) {
+  let foundIndex = 1;
+  for (const juz of JUZ_LIST) {
+    if (juz.startSurah <= surahNumber) {
+      foundIndex = juz.index;
+    }
+  }
+  return foundIndex;
 }
 
 export default function QuranScreen({
@@ -29,356 +90,381 @@ export default function QuranScreen({
   onPlayAyah,
   isLightMode,
   settings,
-  onUpdateSettings
+  onUpdateSettings,
 }: QuranScreenProps) {
-  // Navigation tabs: 'surahs' | 'juz' | 'bookmarks' | 'tags' | 'search' | 'reading'
-  const [viewTab, setViewTab] = useState<'surahs' | 'juz' | 'bookmarks' | 'tags' | 'search' | 'reading'>('surahs');
-  const [activeSurah, setActiveSurah] = useState<number>(currentSurah);
-  const [displayMode, setDisplayMode] = useState<'mushaf' | 'verse'>('verse');
+  const theme = getThemeClasses(isLightMode);
+  const [viewTab, setViewTab] = useState<ViewTab>('surahs');
+  const [activeSurah, setActiveSurah] = useState<number>(currentSurah || 1);
+  const [targetAyah, setTargetAyah] = useState<number>(currentAyah || 1);
+  const [displayMode, setDisplayMode] = useState<DisplayMode>('verse');
   const [searchQuery, setSearchQuery] = useState('');
   const [ayahs, setAyahs] = useState<AyahData[]>([]);
   const [loading, setLoading] = useState(false);
-  const [selectedAyah, setSelectedAyah] = useState<number | null>(null);
+  const [error, setError] = useState('');
+  const [selectedAyah, setSelectedAyah] = useState<number | null>(currentAyah || null);
   const [bookmarks, setBookmarks] = useState<Bookmark[]>(Storage.getBookmarks());
   const [copiedAyah, setCopiedAyah] = useState<number | null>(null);
-  const [showTafsirModal, setShowTafsirModal] = useState<AyahData | null>(null);
   const [showFontSettings, setShowFontSettings] = useState(false);
-  const [wordByWord, setWordByWord] = useState(false);
-  const [activeWord, setActiveWord] = useState<{ arabic: string; translation: string } | null>(null);
-  
+  const [studyAyah, setStudyAyah] = useState<AyahData | null>(null);
   const selectedAyahRef = useRef<HTMLDivElement | null>(null);
 
-  // Sync state if prop changes
+  const activeSurahMeta = SURAH_LIST.find((surah) => surah.number === activeSurah) || SURAH_LIST[0];
+  const activeAyahTotal = activeSurahMeta.numberOfAyahs;
+
+  const filteredSurahs = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return SURAH_LIST;
+    return SURAH_LIST.filter((surah) => {
+      return (
+        surah.englishName.toLowerCase().includes(query) ||
+        surah.englishNameTranslation.toLowerCase().includes(query) ||
+        surah.name.includes(searchQuery.trim()) ||
+        String(surah.number).includes(query)
+      );
+    });
+  }, [searchQuery]);
+
+  const filteredCurrentAyahs = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return [];
+    return ayahs.filter((ayah) => {
+      return (
+        ayah.text.includes(searchQuery.trim()) ||
+        ayah.translation.toLowerCase().includes(query) ||
+        String(ayah.numberInSurah).includes(query)
+      );
+    });
+  }, [ayahs, searchQuery]);
+
   useEffect(() => {
-    if (isPlaying && currentSurah !== activeSurah) {
+    if (isPlaying && currentSurah) {
       setActiveSurah(currentSurah);
+      setTargetAyah(currentAyah || 1);
+      setSelectedAyah(currentAyah || 1);
+      setViewTab('reading');
     }
-  }, [currentSurah, isPlaying]);
+  }, [currentSurah, currentAyah, isPlaying]);
 
-  // Fetch Surah text and translations
   useEffect(() => {
-    if (viewTab === 'reading') {
+    if (viewTab !== 'reading') return;
+
+    const controller = new AbortController();
+    const loadSurah = async () => {
       setLoading(true);
-      const edition = settings.translation_edition || 'en.sahih';
-      
-      // Fetch dual Arabic + Translation from Al Quran Cloud
-      Promise.all([
-        fetch(`https://api.alquran.cloud/v1/surah/${activeSurah}`),
-        fetch(`https://api.alquran.cloud/v1/surah/${activeSurah}/${edition}`)
-      ])
-      .then(([resAr, resTr]) => Promise.all([resAr.json(), resTr.json()]))
-      .then(([dataAr, dataTr]) => {
-        if (dataAr.data && dataTr.data) {
-          const formatted: AyahData[] = dataAr.data.ayahs.map((ayah: any, index: number) => ({
-            number: ayah.number,
-            numberInSurah: ayah.numberInSurah,
-            text: ayah.text,
-            translation: dataTr.data.ayahs[index]?.text || "Translation available",
-            tafsir: "Tafsir Ibn Kathir: This ayah brings guidance and glad tidings to the believers, encouraging steadfastness and remembrance of Allah.",
-            words: ayah.text.split(' ').map((w: string) => ({
-              arabic: w,
-              translation: w.length > 4 ? "blessing/guidance" : "and/the"
-            }))
-          }));
-          setAyahs(formatted);
-          setLoading(false);
-          
-          // Save reading progress
-          const meta = SURAH_LIST.find(s => s.number === activeSurah) || SURAH_LIST[0];
-          Storage.saveProgress({
-            surah_number: activeSurah,
-            ayah_number: currentAyah || 1,
-            page_number: meta.startPage,
-            juz_number: 1,
-            updated_at: new Date().toISOString()
-          });
+      setError('');
+      const translationEdition = settings.translation_edition || 'en.sahih';
+
+      try {
+        const [arabicResponse, translationResponse] = await Promise.all([
+          fetch(`https://api.alquran.cloud/v1/surah/${activeSurah}`, { signal: controller.signal }),
+          fetch(`https://api.alquran.cloud/v1/surah/${activeSurah}/${translationEdition}`, { signal: controller.signal }),
+        ]);
+
+        if (!arabicResponse.ok || !translationResponse.ok) {
+          throw new Error('The Quran service did not respond correctly.');
         }
-      })
-      .catch(() => {
-        // High-quality fallback data
-        setAyahs(Array.from({ length: (SURAH_LIST.find(s => s.number === activeSurah)?.numberOfAyahs || 10) }).map((_, i) => ({
-          number: i + 1, numberInSurah: i + 1,
-          text: "بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ • وَهُوَ عَلَىٰ كُلِّ شَيْءٍ قَدِيرٌ",
-          translation: "In the name of Allah, the Entirely Merciful, the Especially Merciful. And He is over all things competent.",
-          tafsir: "This verse serves as a profound reminder of Allah's ultimate capability and endless mercy.",
-          words: [{ arabic: "بِسْمِ", translation: "In the name" }, { arabic: "اللَّهِ", translation: "Allah" }]
-        })));
+
+        const [arabicJson, translationJson] = (await Promise.all([
+          arabicResponse.json(),
+          translationResponse.json(),
+        ])) as [QuranApiSurahResponse, QuranApiSurahResponse];
+
+        const arabicAyahs = arabicJson.data?.ayahs || [];
+        const translationAyahs = translationJson.data?.ayahs || [];
+
+        if (!arabicAyahs.length) {
+          throw new Error('No ayahs were returned for this surah.');
+        }
+
+        const nextAyahs: AyahData[] = arabicAyahs.map((ayah, index) => ({
+          number: ayah.number,
+          numberInSurah: ayah.numberInSurah,
+          text: ayah.text,
+          translation: translationAyahs[index]?.text || 'Translation unavailable for this ayah.',
+        }));
+
+        setAyahs(nextAyahs);
+        setSelectedAyah(targetAyah || 1);
+
+        Storage.saveProgress({
+          surah_number: activeSurah,
+          ayah_number: targetAyah || 1,
+          page_number: activeSurahMeta.startPage,
+          juz_number: getJuzIndexForSurah(activeSurah),
+          updated_at: new Date().toISOString(),
+        });
+      } catch (err) {
+        if (err instanceof DOMException && err.name === 'AbortError') return;
+        setAyahs([]);
+        setError(err instanceof Error ? err.message : 'Unable to load this surah. Check your internet connection and try again.');
+      } finally {
         setLoading(false);
-      });
-    }
-  }, [activeSurah, viewTab, settings.translation_edition]);
+      }
+    };
 
-  // Auto-scroll during audio playback
+    loadSurah();
+
+    return () => controller.abort();
+  }, [activeSurah, activeSurahMeta.startPage, settings.translation_edition, targetAyah, viewTab]);
+
   useEffect(() => {
-    if (isPlaying && currentAyah && viewTab === 'reading') {
-      setSelectedAyah(currentAyah);
+    if (viewTab !== 'reading' || !selectedAyah) return;
+    const scrollTimer = window.setTimeout(() => {
       selectedAyahRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
-  }, [currentAyah, isPlaying, viewTab]);
+    }, 150);
+    return () => window.clearTimeout(scrollTimer);
+  }, [selectedAyah, viewTab, ayahs.length]);
 
-  const handleAddBookmark = (ayahNum: number) => {
-    const meta = SURAH_LIST.find(s => s.number === activeSurah) || SURAH_LIST[0];
-    Storage.addBookmark({
+  const openSurah = (surah: number, ayah: number = 1) => {
+    setActiveSurah(surah);
+    setTargetAyah(ayah);
+    setSelectedAyah(ayah);
+    setViewTab('reading');
+  };
+
+  const handleSelectAyah = (ayahNumber: number) => {
+    setSelectedAyah(ayahNumber);
+    setTargetAyah(ayahNumber);
+    Storage.saveProgress({
+      surah_number: activeSurah,
+      ayah_number: ayahNumber,
+      page_number: activeSurahMeta.startPage,
+      juz_number: getJuzIndexForSurah(activeSurah),
+      updated_at: new Date().toISOString(),
+    });
+  };
+
+  const handleAddBookmark = async (ayahNum: number) => {
+    if (bookmarks.some((bookmark) => isSameBookmark(bookmark, activeSurah, ayahNum))) return;
+    await Storage.addBookmark({
       surah_number: activeSurah,
       ayah_number: ayahNum,
-      page_number: meta.startPage,
-      note: `Bookmarked Surah ${meta.englishName} Ayah ${ayahNum}`
-    }).then(() => setBookmarks(Storage.getBookmarks()));
+      page_number: activeSurahMeta.startPage,
+      note: `${activeSurahMeta.englishName} ${activeSurah}:${ayahNum}`,
+    });
+    setBookmarks(Storage.getBookmarks());
   };
 
-  const handleRemoveBookmark = (id: string) => {
-    Storage.removeBookmark(id).then(() => setBookmarks(Storage.getBookmarks()));
+  const handleRemoveBookmark = async (id: string) => {
+    await Storage.removeBookmark(id);
+    setBookmarks(Storage.getBookmarks());
   };
 
-  const handleCopy = (ayah: AyahData) => {
-    navigator.clipboard.writeText(`${ayah.text}\n\n"${ayah.translation}" - (Quran ${activeSurah}:${ayah.numberInSurah})`);
-    setCopiedAyah(ayah.numberInSurah);
-    setTimeout(() => setCopiedAyah(null), 2000);
-  };
-
-  const handleShare = (ayah: AyahData) => {
-    if (navigator.share) {
-      navigator.share({
-        title: `Quran ${activeSurah}:${ayah.numberInSurah}`,
-        text: `${ayah.text}\n\n"${ayah.translation}"`,
-        url: window.location.href,
-      }).catch(() => {});
-    } else {
-      handleCopy(ayah);
+  const handleCopy = async (ayah: AyahData) => {
+    const text = `${ayah.text}\n\n${ayah.translation}\n— Quran ${activeSurah}:${ayah.numberInSurah}`;
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedAyah(ayah.numberInSurah);
+      window.setTimeout(() => setCopiedAyah(null), 1800);
+    } catch {
+      setCopiedAyah(null);
     }
   };
 
-  const activeSurahMeta = SURAH_LIST.find(s => s.number === activeSurah) || SURAH_LIST[0];
+  const handleShare = async (ayah: AyahData) => {
+    const text = `${ayah.text}\n\n${ayah.translation}\n— Quran ${activeSurah}:${ayah.numberInSurah}`;
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: `Quran ${activeSurah}:${ayah.numberInSurah}`, text });
+        return;
+      } catch {
+        // Fall back to copy when sharing is cancelled or unsupported.
+      }
+    }
+    await handleCopy(ayah);
+  };
+
+  const updateFontSize = (field: 'arabic_font_size' | 'translation_font_size', delta: number) => {
+    const currentValue = settings[field];
+    const nextValue = Math.min(field === 'arabic_font_size' ? 44 : 24, Math.max(field === 'arabic_font_size' ? 20 : 12, currentValue + delta));
+    onUpdateSettings({ ...settings, [field]: nextValue });
+  };
+
+  const progressPercent = getProgressPercent(targetAyah || 1, activeAyahTotal);
 
   return (
-    <div className="max-w-lg mx-auto pb-32">
-      {/* Top Header / Search Navigation */}
-      <div className={`sticky top-0 z-30 border-b backdrop-blur-md px-4 py-3 flex items-center justify-between gap-2 ${
-        isLightMode ? 'bg-slate-100/95 border-slate-200' : 'bg-slate-900/95 border-slate-800'
-      }`}>
+    <div className={`max-w-lg mx-auto pb-32 min-h-screen ${theme.page}`}>
+      <div className={`sticky top-0 z-30 border-b backdrop-blur-md px-4 py-3 ${theme.header}`}>
         {viewTab === 'reading' ? (
-          <button 
-            onClick={() => setViewTab('surahs')}
-            className="flex items-center gap-2 font-bold text-sm hover:opacity-80 active:scale-95"
-          >
-            <ArrowLeft className="w-5 h-5 text-emerald-500" />
-            <span>{activeSurahMeta.englishName}</span>
-          </button>
-        ) : (
-          <div className="flex items-center gap-4 flex-1">
-            <h1 className="text-xl font-extrabold text-emerald-500 tracking-tight">Mushaf</h1>
-            {/* Top Tab Bar (Surahs | Juz' | Bookmarks | Tags) */}
-            <div className="flex items-center gap-1 bg-slate-800/60 p-1 rounded-xl border border-slate-700/60 text-xs font-bold text-slate-400">
-              {(['surahs', 'juz', 'bookmarks', 'tags'] as const).map(tab => (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <button
+                onClick={() => setViewTab('surahs')}
+                className="flex items-center gap-2 min-w-0 font-bold text-sm active:scale-95"
+              >
+                <ArrowLeft className="w-5 h-5 text-emerald-500 flex-shrink-0" />
+                <span className="truncate">{activeSurahMeta.englishName}</span>
+              </button>
+              <div className="flex items-center gap-1">
                 <button
-                  key={tab}
-                  onClick={() => setViewTab(tab)}
-                  className={`px-3 py-1.5 rounded-lg capitalize transition-all ${
-                    viewTab === tab ? 'bg-emerald-600 text-white shadow' : 'hover:text-white'
-                  }`}
+                  onClick={() => setDisplayMode((mode) => (mode === 'verse' ? 'compact' : 'verse'))}
+                  className={`px-3 py-2 rounded-xl border text-xs font-extrabold transition-all ${displayMode === 'compact' ? 'bg-emerald-600 border-emerald-500 text-white' : theme.softCard}`}
                 >
-                  {tab === 'juz' ? "Juz'" : tab}
+                  {displayMode === 'compact' ? 'Compact' : 'Verse'}
                 </button>
-              ))}
+                <button
+                  onClick={() => setShowFontSettings((value) => !value)}
+                  className={`p-2 rounded-xl border transition-all ${showFontSettings ? 'bg-emerald-600 border-emerald-500 text-white' : theme.softCard}`}
+                  aria-label="Font settings"
+                >
+                  <Sliders className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+            <div className="h-1.5 rounded-full bg-slate-700/50 overflow-hidden">
+              <div className="h-full bg-emerald-500 transition-all" style={{ width: `${progressPercent}%` }} />
             </div>
           </div>
-        )}
-
-        <div className="flex items-center gap-1">
-          {viewTab === 'reading' && (
-            <>
-              <button 
-                onClick={() => setDisplayMode(prev => prev === 'mushaf' ? 'verse' : 'mushaf')}
-                className={`px-2.5 py-1.5 rounded-xl text-xs font-extrabold border transition-all ${
-                  displayMode === 'mushaf' 
-                    ? 'bg-emerald-900/60 border-emerald-500 text-emerald-400 shadow' 
-                    : 'bg-slate-800 border-slate-700 text-slate-300'
-                }`}
-                title="Toggle Mushaf Page View"
-              >
-                {displayMode === 'mushaf' ? '📖 Mushaf Mode' : '📝 Verse Mode'}
-              </button>
-              <button
-                onClick={() => setShowFontSettings(!showFontSettings)}
-                className={`p-2 rounded-xl border transition-all ${showFontSettings ? 'bg-emerald-600 text-white border-emerald-500' : 'bg-slate-800 border-slate-700 text-slate-300'}`}
-              >
-                <Sliders className="w-4 h-4" />
-              </button>
-            </>
-          )}
-          {viewTab !== 'reading' && viewTab !== 'search' && (
-            <button 
+        ) : (
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h1 className="text-xl font-extrabold text-emerald-500 tracking-tight">Mushaf</h1>
+              <p className={`text-[11px] font-semibold ${theme.muted}`}>Read, listen, bookmark, and continue safely</p>
+            </div>
+            <button
               onClick={() => setViewTab('search')}
-              className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl border border-slate-700 transition-colors"
+              className={`p-2.5 rounded-xl border transition-all ${theme.softCard}`}
+              aria-label="Search Quran"
             >
               <Search className="w-4 h-4" />
             </button>
-          )}
-        </div>
+          </div>
+        )}
+
+        {viewTab !== 'reading' && (
+          <div className="flex gap-1 mt-4 overflow-x-auto no-scrollbar text-xs font-bold">
+            {(['surahs', 'juz', 'bookmarks', 'search'] as const).map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setViewTab(tab)}
+                className={`px-4 py-2 rounded-xl capitalize whitespace-nowrap transition-all ${viewTab === tab ? 'bg-emerald-600 text-white shadow' : theme.softCard}`}
+              >
+                {tab === 'juz' ? "Juz'" : tab}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
-      {/* Font & Display Settings Accordion */}
       {showFontSettings && viewTab === 'reading' && (
-        <div className={`m-4 p-5 rounded-3xl border space-y-4 animate-in fade-in duration-200 ${
-          isLightMode ? 'bg-white border-slate-200 shadow-sm' : 'bg-slate-800 border-slate-700 shadow-xl'
-        }`}>
-          <div className="flex items-center justify-between pb-3 border-b border-slate-700/60">
-            <span className="text-sm font-bold">Reading Preferences</span>
-            <button onClick={() => setShowFontSettings(false)} className="text-xs text-emerald-500 font-semibold">Done</button>
+        <div className={`mx-4 mt-4 p-4 rounded-2xl border ${theme.card}`}>
+          <div className="flex items-center justify-between gap-3 mb-4">
+            <div>
+              <p className="text-sm font-extrabold">Reading controls</p>
+              <p className={`text-xs ${theme.muted}`}>Your choices are saved in settings.</p>
+            </div>
+            <button
+              onClick={() => onUpdateSettings({ ...settings, show_translation: !settings.show_translation })}
+              className={`px-3 py-2 rounded-xl text-xs font-bold ${settings.show_translation ? 'bg-emerald-600 text-white' : theme.softCard}`}
+            >
+              Translation {settings.show_translation ? 'On' : 'Off'}
+            </button>
           </div>
-
-          <div className="space-y-3">
-            <div>
-              <div className="flex justify-between text-xs font-semibold text-slate-400 mb-2">
-                <span>Arabic Font Size</span>
-                <span>{settings.arabic_font_size}px</span>
+          <div className="grid grid-cols-2 gap-3">
+            <div className={`rounded-2xl p-3 border ${theme.softCard}`}>
+              <p className="text-xs font-bold mb-2">Arabic size</p>
+              <div className="flex items-center justify-between">
+                <button onClick={() => updateFontSize('arabic_font_size', -2)} className="p-2 rounded-lg bg-slate-700 text-white"><Minus className="w-4 h-4" /></button>
+                <span className="text-sm font-extrabold">{settings.arabic_font_size}px</span>
+                <button onClick={() => updateFontSize('arabic_font_size', 2)} className="p-2 rounded-lg bg-emerald-600 text-white"><Plus className="w-4 h-4" /></button>
               </div>
-              <input 
-                type="range" min="20" max="44" step="2"
-                value={settings.arabic_font_size}
-                onChange={(e) => onUpdateSettings({ ...settings, arabic_font_size: Number(e.target.value) })}
-                className="w-full accent-emerald-500 bg-slate-700 h-2 rounded-lg"
-              />
             </div>
-
-            <div>
-              <div className="flex justify-between text-xs font-semibold text-slate-400 mb-2">
-                <span>Translation Font Size</span>
-                <span>{settings.translation_font_size}px</span>
+            <div className={`rounded-2xl p-3 border ${theme.softCard}`}>
+              <p className="text-xs font-bold mb-2">Translation size</p>
+              <div className="flex items-center justify-between">
+                <button onClick={() => updateFontSize('translation_font_size', -1)} className="p-2 rounded-lg bg-slate-700 text-white"><Minus className="w-4 h-4" /></button>
+                <span className="text-sm font-extrabold">{settings.translation_font_size}px</span>
+                <button onClick={() => updateFontSize('translation_font_size', 1)} className="p-2 rounded-lg bg-emerald-600 text-white"><Plus className="w-4 h-4" /></button>
               </div>
-              <input 
-                type="range" min="12" max="22" step="1"
-                value={settings.translation_font_size}
-                onChange={(e) => onUpdateSettings({ ...settings, translation_font_size: Number(e.target.value) })}
-                className="w-full accent-emerald-500 bg-slate-700 h-2 rounded-lg"
-              />
-            </div>
-
-            <div className="pt-2 flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-300">Word-by-Word Translation</span>
-              <button 
-                onClick={() => setWordByWord(!wordByWord)}
-                className={`px-3 py-1 rounded-xl text-xs font-bold transition-all ${
-                  wordByWord ? 'bg-emerald-600 text-white' : 'bg-slate-700 text-slate-300'
-                }`}
-              >
-                {wordByWord ? 'Enabled' : 'Disabled'}
-              </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* CONTENT VIEWS */}
-      <div className="px-4 py-4">
-        {/* 1. SURAH LIST VIEW */}
+      <div className="px-4 py-5 space-y-4">
         {viewTab === 'surahs' && (
-          <div className="space-y-2.5">
-            {SURAH_LIST.map((surah) => (
+          <div className="space-y-3">
+            <div className={`p-5 rounded-3xl border bg-gradient-to-br ${isLightMode ? 'from-emerald-50 to-white border-emerald-100' : 'from-emerald-950/70 to-slate-800 border-emerald-800/50'}`}>
+              <p className="text-xs uppercase tracking-widest font-extrabold text-emerald-500 mb-2">Continue Reading</p>
+              <div className="flex items-center justify-between gap-4">
+                <div className="min-w-0">
+                  <h2 className="text-2xl font-extrabold truncate">{activeSurahMeta.englishName}</h2>
+                  <p className={`text-sm ${theme.muted}`}>Ayah {targetAyah || 1} • Page {activeSurahMeta.startPage}</p>
+                </div>
+                <button
+                  onClick={() => openSurah(activeSurah, targetAyah || 1)}
+                  className="px-4 py-3 rounded-2xl bg-emerald-600 text-white font-bold text-sm shadow active:scale-95"
+                >
+                  Open
+                </button>
+              </div>
+            </div>
+
+            {filteredSurahs.map((surah) => (
               <button
                 key={surah.number}
-                onClick={() => {
-                  setActiveSurah(surah.number);
-                  setViewTab('reading');
-                }}
-                className={`w-full p-4 rounded-2xl border flex items-center justify-between gap-4 text-left transition-all active:scale-95 group ${
-                  isLightMode 
-                    ? 'bg-white border-slate-200 hover:border-emerald-500 shadow-sm' 
-                    : 'bg-slate-800/60 border-slate-700/80 hover:border-emerald-500 shadow-md'
-                }`}
+                onClick={() => openSurah(surah.number, 1)}
+                className={`w-full p-4 rounded-2xl border text-left transition-all active:scale-[0.99] ${theme.card} ${theme.hover}`}
               >
-                <div className="flex items-center gap-4">
-                  {/* Surah Number Badge */}
-                  <div className="relative w-11 h-11 bg-slate-800 rounded-2xl border border-slate-700 flex items-center justify-center font-bold text-emerald-400 group-hover:bg-emerald-700 group-hover:text-white transition-colors shadow">
-                    <span>{surah.number}</span>
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-base tracking-tight group-hover:text-emerald-500 transition-colors">{surah.englishName}</h3>
-                    <div className="flex items-center gap-2 text-xs text-slate-400 mt-0.5">
-                      <span className="px-2 py-0.5 bg-slate-700/60 rounded-md font-medium text-slate-300">{surah.revelationType}</span>
-                      <span>•</span>
-                      <span>{surah.numberOfAyahs} verses</span>
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-10 h-10 rounded-2xl bg-emerald-600/15 text-emerald-500 flex items-center justify-center font-extrabold text-sm">
+                      {surah.number}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="font-extrabold truncate">{surah.englishName}</p>
+                      <p className={`text-xs truncate ${theme.muted}`}>{surah.englishNameTranslation} • {surah.numberOfAyahs} ayahs</p>
                     </div>
                   </div>
+                  <p className="text-2xl font-quran text-emerald-500 text-right">{surah.name}</p>
                 </div>
-                <span className="text-xl font-quran font-bold text-gold tracking-wide pr-1">{surah.name}</span>
               </button>
             ))}
           </div>
         )}
 
-        {/* 2. JUZ' LIST VIEW */}
         {viewTab === 'juz' && (
-          <div className="space-y-2.5">
+          <div className="space-y-3">
             {JUZ_LIST.map((juz) => (
               <button
                 key={juz.index}
-                onClick={() => {
-                  setActiveSurah(juz.startSurah);
-                  setViewTab('reading');
-                }}
-                className={`w-full p-4 rounded-2xl border flex items-center justify-between text-left transition-all active:scale-95 group ${
-                  isLightMode 
-                    ? 'bg-white border-slate-200 hover:border-emerald-500 shadow-sm' 
-                    : 'bg-slate-800/60 border-slate-700/80 hover:border-emerald-500 shadow-md'
-                }`}
+                onClick={() => openSurah(juz.startSurah, juz.startAyah)}
+                className={`w-full p-4 rounded-2xl border text-left transition-all active:scale-[0.99] ${theme.card} ${theme.hover}`}
               >
-                <div className="flex items-center gap-4">
-                  <div className="w-11 h-11 bg-slate-800 rounded-2xl border border-slate-700 flex items-center justify-center font-extrabold text-emerald-400 group-hover:bg-emerald-700 group-hover:text-white transition-colors shadow">
-                    <span>{juz.index}</span>
-                  </div>
+                <div className="flex items-center justify-between gap-4">
                   <div>
-                    <h3 className="font-bold text-base tracking-tight group-hover:text-emerald-500 transition-colors">Juz' {juz.index}</h3>
-                    <p className="text-xs text-slate-400 mt-0.5">Starts at Surah {juz.startSurah}, Ayah {juz.startAyah} • Page {juz.startPage}</p>
+                    <p className="font-extrabold">Juz' {juz.index}</p>
+                    <p className={`text-xs ${theme.muted}`}>{juz.name}</p>
                   </div>
+                  <span className="text-xs font-bold text-emerald-500 bg-emerald-500/10 px-3 py-1.5 rounded-xl">Page {juz.startPage}</span>
                 </div>
-                <span className="text-xs font-extrabold text-emerald-500 bg-emerald-950/60 px-3 py-1.5 rounded-xl border border-emerald-700/40">Open</span>
               </button>
             ))}
           </div>
         )}
 
-        {/* 3. BOOKMARKS VIEW */}
         {viewTab === 'bookmarks' && (
           <div className="space-y-3">
             {bookmarks.length === 0 ? (
-              <div className="text-center py-16 space-y-3">
-                <div className="w-16 h-16 bg-slate-800 rounded-full flex items-center justify-center mx-auto text-slate-600">
-                  <BookmarkIcon className="w-8 h-8" />
-                </div>
-                <p className="text-base font-bold text-slate-300">No Bookmarks yet</p>
-                <p className="text-xs text-slate-500 max-w-xs mx-auto">
-                  Tap any verse while reading to save it to your bookmarks for quick reference later.
-                </p>
+              <div className={`p-8 rounded-3xl border text-center ${theme.card}`}>
+                <BookmarkIcon className="w-10 h-10 mx-auto text-emerald-500 mb-3" />
+                <p className="font-extrabold">No bookmarks yet</p>
+                <p className={`text-sm mt-1 ${theme.muted}`}>Open any surah and save ayahs you want to return to.</p>
               </div>
             ) : (
-              bookmarks.map((b) => {
-                const meta = SURAH_LIST.find(s => s.number === b.surah_number) || SURAH_LIST[0];
+              bookmarks.map((bookmark) => {
+                const surah = SURAH_LIST.find((item) => item.number === bookmark.surah_number) || SURAH_LIST[0];
                 return (
-                  <div
-                    key={b.id}
-                    className={`p-4 rounded-2xl border flex items-center justify-between gap-4 transition-all ${
-                      isLightMode ? 'bg-white border-slate-200 shadow-sm' : 'bg-slate-800/60 border-slate-700/80 shadow-md'
-                    }`}
-                  >
-                    <button
-                      onClick={() => {
-                        setActiveSurah(b.surah_number);
-                        setViewTab('reading');
-                      }}
-                      className="flex-1 text-left"
-                    >
-                      <h3 className="font-bold text-base text-emerald-500">{meta.englishName} ({b.surah_number}:{b.ayah_number})</h3>
-                      <p className="text-xs text-slate-400 mt-0.5">Page {b.page_number} • Saved on {new Date(b.created_at).toLocaleDateString()}</p>
-                      {b.note && <p className="text-xs text-slate-300 mt-1 italic">"{b.note}"</p>}
-                    </button>
-                    <button
-                      onClick={() => handleRemoveBookmark(b.id)}
-                      className="p-2.5 text-slate-400 hover:text-red-400 rounded-xl bg-slate-800 hover:bg-slate-700 transition-colors"
-                      title="Delete Bookmark"
-                    >
-                      <Trash2 className="w-5 h-5" />
-                    </button>
+                  <div key={bookmark.id} className={`p-4 rounded-2xl border ${theme.card}`}>
+                    <div className="flex items-center justify-between gap-3">
+                      <button onClick={() => openSurah(bookmark.surah_number, bookmark.ayah_number)} className="text-left min-w-0 flex-1">
+                        <p className="font-extrabold truncate">{surah.englishName} {bookmark.surah_number}:{bookmark.ayah_number}</p>
+                        <p className={`text-xs truncate ${theme.muted}`}>{bookmark.note || 'Saved ayah'} • Page {bookmark.page_number}</p>
+                      </button>
+                      <button onClick={() => handleRemoveBookmark(bookmark.id)} className="p-2 rounded-xl bg-rose-500/10 text-rose-500 active:scale-95" aria-label="Remove bookmark">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
                 );
               })
@@ -386,317 +472,181 @@ export default function QuranScreen({
           </div>
         )}
 
-        {/* 4. TAGS VIEW */}
-        {viewTab === 'tags' && (
+        {viewTab === 'search' && (
           <div className="space-y-4">
-            <div className="p-4 bg-emerald-950/40 border border-emerald-800/50 rounded-2xl flex items-center gap-3">
-              <Tag className="w-5 h-5 text-emerald-400 flex-shrink-0" />
-              <p className="text-xs text-emerald-200">Browse Verses categorized by topic for quick reflection and study.</p>
+            <div className="relative">
+              <Search className={`w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 ${theme.muted}`} />
+              <input
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                placeholder="Search surah name, number, Arabic name, or loaded ayahs"
+                className={`w-full pl-11 pr-4 py-3.5 rounded-2xl border outline-none focus:ring-2 focus:ring-emerald-500/30 ${theme.input}`}
+              />
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              {[
-                { name: 'Patience (Sabr)', count: '114 Verses', surah: 2, ayah: 153 },
-                { name: 'Mercy (Rahmah)', count: '337 Verses', surah: 39, ayah: 53 },
-                { name: 'Prayer (Salah)', count: '99 Verses', surah: 2, ayah: 45 },
-                { name: 'Forgiveness', count: '234 Verses', surah: 3, ayah: 135 },
-                { name: 'Gratitude (Shukr)', count: '75 Verses', surah: 14, ayah: 7 },
-                { name: 'Peace (Salam)', count: '140 Verses', surah: 59, ayah: 23 },
-              ].map((tag, i) => (
-                <button
-                  key={i}
-                  onClick={() => {
-                    setActiveSurah(tag.surah);
-                    setViewTab('reading');
-                  }}
-                  className={`p-4 rounded-2xl border text-left transition-all active:scale-95 group ${
-                    isLightMode ? 'bg-white border-slate-200 shadow-sm hover:border-emerald-500' : 'bg-slate-800/60 border-slate-700/80 shadow-md hover:border-emerald-500'
-                  }`}
-                >
-                  <p className="font-bold text-sm text-white group-hover:text-emerald-500 transition-colors">{tag.name}</p>
-                  <p className="text-xs text-slate-400 mt-1">{tag.count}</p>
+            <div className={`p-4 rounded-2xl border ${theme.softCard}`}>
+              <p className="text-xs leading-relaxed">
+                Search covers surah names immediately. Ayah text search works for the currently loaded surah after you open it once.
+              </p>
+            </div>
+            {filteredCurrentAyahs.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-xs font-extrabold uppercase tracking-widest text-emerald-500">Loaded ayah matches</p>
+                {filteredCurrentAyahs.map((ayah) => (
+                  <button key={ayah.number} onClick={() => openSurah(activeSurah, ayah.numberInSurah)} className={`w-full p-4 rounded-2xl border text-left ${theme.card}`}>
+                    <p className="font-extrabold">{activeSurahMeta.englishName} {activeSurah}:{ayah.numberInSurah}</p>
+                    <p className={`text-xs line-clamp-2 ${theme.muted}`}>{ayah.translation}</p>
+                  </button>
+                ))}
+              </div>
+            )}
+            <div className="space-y-2">
+              <p className="text-xs font-extrabold uppercase tracking-widest text-emerald-500">Surah matches</p>
+              {filteredSurahs.map((surah) => (
+                <button key={surah.number} onClick={() => openSurah(surah.number, 1)} className={`w-full p-4 rounded-2xl border text-left ${theme.card}`}>
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="font-extrabold">{surah.number}. {surah.englishName}</span>
+                    <span className="font-quran text-xl text-emerald-500">{surah.name}</span>
+                  </div>
+                  <p className={`text-xs ${theme.muted}`}>{surah.englishNameTranslation}</p>
                 </button>
               ))}
             </div>
           </div>
         )}
 
-        {/* 5. SEARCH VIEW */}
-        {viewTab === 'search' && (
+        {viewTab === 'reading' && (
           <div className="space-y-4">
-            <div className="flex items-center gap-2">
-              <button 
-                onClick={() => setViewTab('surahs')}
-                className="p-2.5 bg-slate-800 hover:bg-slate-700 rounded-xl transition-colors text-slate-300"
-              >
-                <ArrowLeft className="w-5 h-5" />
-              </button>
-              <input
-                type="text"
-                autoFocus
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search Quran by keyword (Arabic or English)..."
-                className="flex-1 px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-600 shadow-inner"
-              />
+            <div className={`p-5 rounded-3xl border ${theme.card}`}>
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="text-xs uppercase tracking-widest font-extrabold text-emerald-500">Surah {activeSurah}</p>
+                  <h2 className="text-2xl font-extrabold">{activeSurahMeta.englishName}</h2>
+                  <p className={`text-sm ${theme.muted}`}>{activeSurahMeta.englishNameTranslation} • {activeSurahMeta.revelationType}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-3xl font-quran text-emerald-500">{activeSurahMeta.name}</p>
+                  <p className={`text-xs font-bold ${theme.muted}`}>{activeAyahTotal} ayahs</p>
+                </div>
+              </div>
             </div>
 
-            {searchQuery.trim().length > 1 && (
-              <div className="space-y-2.5 pt-2">
-                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest px-1">Search Results</p>
-                {SURAH_LIST.filter(s => s.englishName.toLowerCase().includes(searchQuery.toLowerCase()) || s.englishNameTranslation.toLowerCase().includes(searchQuery.toLowerCase())).map((surah) => (
-                  <button
-                    key={surah.number}
-                    onClick={() => {
-                      setActiveSurah(surah.number);
-                      setViewTab('reading');
-                    }}
-                    className="w-full p-4 bg-slate-800/80 border border-slate-700 rounded-2xl flex items-center justify-between text-left hover:border-emerald-500 transition-all"
-                  >
-                    <div>
-                      <h4 className="font-bold text-emerald-500">{surah.englishName} ({surah.englishNameTranslation})</h4>
-                      <p className="text-xs text-slate-400 mt-0.5">Surah {surah.number} • {surah.numberOfAyahs} Verses</p>
-                    </div>
-                    <span className="text-xs font-bold bg-slate-700 px-3 py-1.5 rounded-xl text-slate-200">Open Chapter</span>
-                  </button>
-                ))}
+            {loading && (
+              <div className={`p-8 rounded-3xl border text-center ${theme.card}`}>
+                <Loader2 className="w-9 h-9 mx-auto text-emerald-500 animate-spin mb-3" />
+                <p className="font-bold">Loading Quran text and translation...</p>
               </div>
             )}
-          </div>
-        )}
 
-        {/* 6. READING VIEW (MUSHAF VS VERSE) */}
-        {viewTab === 'reading' && (
-          <div>
-            {loading ? (
-              <div className="py-24 text-center space-y-4">
-                <div className="w-12 h-12 border-4 border-emerald-500/20 border-t-emerald-500 rounded-full animate-spin mx-auto" />
-                <p className="text-xs font-bold text-slate-400 tracking-wider uppercase">Loading Surah...</p>
-              </div>
-            ) : displayMode === 'mushaf' ? (
-              /* Mushaf Page-Image Mode */
-              <div className="flex flex-col items-center space-y-8 animate-in fade-in duration-300">
-                <div className="w-full bg-slate-950 p-4 rounded-3xl border border-slate-800 shadow-2xl overflow-hidden relative group min-h-[450px] flex flex-col items-center justify-center">
-                  <div className="absolute inset-0 bg-gradient-to-b from-amber-500/5 via-transparent to-amber-500/5 pointer-events-none" />
-                  
-                  {/* Real Mushaf Page Image Simulation / Actual Fallback */}
-                  <img
-                    src={`https://images.quran.com/w1024/page${activeSurahMeta.startPage.toString().padStart(3, '0')}.png`}
-                    alt={`Mushaf Page ${activeSurahMeta.startPage}`}
-                    onError={(e) => {
-                      // Fallback if image fails to load
-                      (e.target as HTMLElement).style.display = 'none';
-                    }}
-                    className="w-full max-w-md h-auto object-contain rounded-xl shadow-lg relative z-10"
-                  />
-
-                  {/* Fallback elegant overlay if image cannot render */}
-                  <div className="py-12 px-6 text-center space-y-6 w-full relative z-0">
-                    <div className="w-16 h-16 mx-auto bg-amber-500/10 border border-amber-500/30 rounded-2xl flex items-center justify-center text-amber-400 font-bold text-2xl shadow-inner">
-                      {activeSurahMeta.number}
-                    </div>
-                    <h3 className="text-3xl font-quran font-bold text-gold leading-relaxed">{activeSurahMeta.name}</h3>
-                    <p className="text-xs text-slate-400 uppercase tracking-widest font-bold">Madani Mushaf • Page {activeSurahMeta.startPage}</p>
-                    <div className="p-4 bg-slate-900 border border-slate-800 rounded-2xl text-xs text-slate-300 leading-relaxed italic">
-                      "Real Mushaf page image rendered matching the physical printed Uthmani page layout exactly. Tap any verse below to play audio or view Tafsir."
-                    </div>
+            {!loading && error && (
+              <div className={`p-6 rounded-3xl border ${theme.card}`}>
+                <div className="flex items-start gap-3">
+                  <AlertCircle className="w-6 h-6 text-amber-500 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-extrabold">Unable to load this surah</p>
+                    <p className={`text-sm mt-1 leading-relaxed ${theme.muted}`}>{error}</p>
+                    <button onClick={() => openSurah(activeSurah, targetAyah)} className="mt-4 px-4 py-2 rounded-xl bg-emerald-600 text-white font-bold text-sm">Retry</button>
                   </div>
                 </div>
-
-                {/* Ayahs overlay list for actions */}
-                <div className="w-full space-y-4">
-                  <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest px-1">Verse Overlay & Context Actions</h4>
-                  {ayahs.map((ayah) => (
-                    <div
-                      key={ayah.numberInSurah}
-                      onClick={() => setSelectedAyah(selectedAyah === ayah.numberInSurah ? null : ayah.numberInSurah)}
-                      className={`p-4 rounded-2xl border cursor-pointer transition-all ${
-                        selectedAyah === ayah.numberInSurah
-                          ? 'bg-emerald-950/40 border-emerald-500 shadow-xl' 
-                          : 'bg-slate-800/60 border-slate-700/60 hover:bg-slate-800'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-emerald-400 bg-slate-900 px-2.5 py-1 rounded-lg border border-slate-700">
-                          {activeSurah}:{ayah.numberInSurah}
-                        </span>
-                        <p className="text-base font-quran font-bold text-gold text-right truncate pl-4 flex-1">{ayah.text}</p>
-                      </div>
-
-                      {selectedAyah === ayah.numberInSurah && (
-                        <div className="mt-4 pt-3 border-t border-slate-700/60 flex items-center justify-around gap-2 animate-in fade-in duration-200">
-                          <button 
-                            onClick={(e) => { e.stopPropagation(); onPlayAyah(activeSurah, ayah.numberInSurah); }}
-                            className="flex items-center gap-1.5 text-xs font-bold px-3 py-2 bg-emerald-600 text-white rounded-xl shadow hover:bg-emerald-500 transition-all"
-                          >
-                            <Play className="w-3.5 h-3.5 fill-current" /> Play
-                          </button>
-                          <button 
-                            onClick={(e) => { e.stopPropagation(); handleAddBookmark(ayah.numberInSurah); }}
-                            className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-xl transition-all"
-                          >
-                            <BookmarkIcon className="w-3.5 h-3.5" /> Bookmark
-                          </button>
-                          <button 
-                            onClick={(e) => { e.stopPropagation(); handleCopy(ayah); }}
-                            className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-xl transition-all"
-                          >
-                            {copiedAyah === ayah.numberInSurah ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />} Copy
-                          </button>
-                          <button 
-                            onClick={(e) => { e.stopPropagation(); setShowTafsirModal(ayah); }}
-                            className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-xl transition-all"
-                          >
-                            <BookOpen className="w-3.5 h-3.5 text-amber-400" /> Tafsir
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : (
-              /* Verse-by-Verse Mode */
-              <div className="space-y-6 animate-in fade-in duration-300">
-                {/* Bismillah Header */}
-                {activeSurah !== 1 && activeSurah !== 9 && (
-                  <div className="text-center py-6 border-b border-slate-800">
-                    <h3 className="text-3xl font-quran font-bold text-gold tracking-wider">بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ</h3>
-                  </div>
-                )}
-
-                {ayahs.map((ayah) => {
-                  const isSelected = selectedAyah === ayah.numberInSurah;
-                  return (
-                    <div
-                      key={ayah.numberInSurah}
-                      ref={isSelected ? selectedAyahRef : null}
-                      onClick={() => setSelectedAyah(isSelected ? null : ayah.numberInSurah)}
-                      className={`p-5 rounded-3xl border transition-all cursor-pointer ${
-                        isSelected 
-                          ? 'bg-emerald-950/30 border-emerald-600/80 shadow-2xl shadow-emerald-950/40' 
-                          : isLightMode ? 'bg-white border-slate-200 shadow-sm hover:border-emerald-500/40' : 'bg-slate-800/60 border-slate-700/80 shadow-md hover:border-emerald-500/40'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between mb-4">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-bold text-emerald-400 bg-slate-900 px-3 py-1.5 rounded-xl border border-slate-700 shadow-inner">
-                            {activeSurah}:{ayah.numberInSurah}
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Arabic Text or Word-By-Word */}
-                      {wordByWord && ayah.words ? (
-                        <div className="flex flex-wrap-reverse gap-y-6 gap-x-4 justify-end my-4 pt-2">
-                          {ayah.words.map((word, wIdx) => (
-                            <button
-                              key={wIdx}
-                              onClick={(e) => { e.stopPropagation(); setActiveWord(word); }}
-                              className="flex flex-col items-center p-2 rounded-xl hover:bg-slate-700/60 transition-colors group"
-                            >
-                              <span className="font-quran font-bold text-gold" style={{ fontSize: `${settings.arabic_font_size}px` }}>{word.arabic}</span>
-                              <span className="text-xs text-slate-400 mt-2 group-hover:text-emerald-400 transition-colors font-sans">{word.translation}</span>
-                            </button>
-                          ))}
-                        </div>
-                      ) : (
-                        <p 
-                          className="text-right font-quran font-bold text-gold leading-loose my-4 select-text"
-                          style={{ fontSize: `${settings.arabic_font_size}px` }}
-                        >
-                          {ayah.text}
-                        </p>
-                      )}
-
-                      {/* Translation */}
-                      {settings.show_translation !== false && (
-                        <p 
-                          className="text-slate-300 font-normal leading-relaxed pt-4 border-t border-slate-700/50 select-text"
-                          style={{ fontSize: `${settings.translation_font_size}px` }}
-                        >
-                          {ayah.translation}
-                        </p>
-                      )}
-
-                      {/* Context Actions Menu */}
-                      {isSelected && (
-                        <div className="mt-6 pt-4 border-t border-slate-700 flex items-center justify-between gap-1 animate-in fade-in duration-200">
-                          <button 
-                            onClick={(e) => { e.stopPropagation(); onPlayAyah(activeSurah, ayah.numberInSurah); }}
-                            className="flex items-center gap-1.5 text-xs font-bold px-4 py-2.5 bg-emerald-600 text-white rounded-xl shadow hover:bg-emerald-500 transition-all active:scale-95"
-                          >
-                            <Play className="w-4 h-4 fill-current" /> Play Audio
-                          </button>
-                          <button 
-                            onClick={(e) => { e.stopPropagation(); handleAddBookmark(ayah.numberInSurah); }}
-                            className="flex items-center gap-1.5 text-xs font-semibold px-3.5 py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-xl transition-all active:scale-95"
-                          >
-                            <BookmarkIcon className="w-4 h-4" /> Bookmark
-                          </button>
-                          <button 
-                            onClick={(e) => { e.stopPropagation(); handleShare(ayah); }}
-                            className="flex items-center gap-1.5 text-xs font-semibold px-3.5 py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-xl transition-all active:scale-95"
-                          >
-                            <Share2 className="w-4 h-4" /> Share
-                          </button>
-                          <button 
-                            onClick={(e) => { e.stopPropagation(); setShowTafsirModal(ayah); }}
-                            className="flex items-center gap-1.5 text-xs font-semibold px-3.5 py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-xl transition-all active:scale-95"
-                          >
-                            <BookOpen className="w-4 h-4 text-amber-400" /> Tafsir
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
               </div>
             )}
+
+            {!loading && !error && ayahs.map((ayah) => {
+              const isSelected = selectedAyah === ayah.numberInSurah;
+              const isBookmarked = bookmarks.some((bookmark) => isSameBookmark(bookmark, activeSurah, ayah.numberInSurah));
+              return (
+                <div
+                  key={ayah.number}
+                  ref={isSelected ? selectedAyahRef : null}
+                  onClick={() => handleSelectAyah(ayah.numberInSurah)}
+                  className={`rounded-3xl border transition-all cursor-pointer ${isSelected ? 'border-emerald-500 ring-2 ring-emerald-500/20' : ''} ${theme.card}`}
+                >
+                  <div className="p-4 flex items-center justify-between gap-3 border-b border-slate-700/30">
+                    <div className="flex items-center gap-2">
+                      <span className="w-9 h-9 rounded-2xl bg-emerald-600 text-white flex items-center justify-center text-xs font-extrabold">
+                        {activeSurah}:{ayah.numberInSurah}
+                      </span>
+                      {isPlaying && currentSurah === activeSurah && currentAyah === ayah.numberInSurah && (
+                        <span className="text-[11px] font-extrabold px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-500">Playing</span>
+                      )}
+                    </div>
+                    {isBookmarked && <BookmarkIcon className="w-5 h-5 text-emerald-500 fill-current" />}
+                  </div>
+
+                  <div className={displayMode === 'compact' ? 'p-4 space-y-3' : 'p-5 space-y-5'}>
+                    <p
+                      className="font-quran text-right text-gold leading-loose"
+                      dir="rtl"
+                      style={{ fontSize: `${settings.arabic_font_size}px` }}
+                    >
+                      {ayah.text}
+                    </p>
+                    {settings.show_translation && (
+                      <p className={`leading-relaxed ${theme.strongMuted}`} style={{ fontSize: `${settings.translation_font_size}px` }}>
+                        {ayah.translation}
+                      </p>
+                    )}
+                  </div>
+
+                  {isSelected && (
+                    <div className="px-4 pb-4 flex flex-wrap gap-2">
+                      <button onClick={(event) => { event.stopPropagation(); onPlayAyah(activeSurah, ayah.numberInSurah); }} className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-emerald-600 text-white text-xs font-bold active:scale-95">
+                        <Play className="w-4 h-4 fill-current" /> Play
+                      </button>
+                      <button onClick={(event) => { event.stopPropagation(); handleAddBookmark(ayah.numberInSurah); }} className={`flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs font-bold active:scale-95 ${isBookmarked ? 'bg-emerald-600/20 text-emerald-500' : theme.softCard}`}>
+                        <BookmarkIcon className="w-4 h-4" /> {isBookmarked ? 'Saved' : 'Bookmark'}
+                      </button>
+                      <button onClick={(event) => { event.stopPropagation(); handleCopy(ayah); }} className={`flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs font-bold active:scale-95 ${theme.softCard}`}>
+                        {copiedAyah === ayah.numberInSurah ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />} {copiedAyah === ayah.numberInSurah ? 'Copied' : 'Copy'}
+                      </button>
+                      <button onClick={(event) => { event.stopPropagation(); handleShare(ayah); }} className={`flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs font-bold active:scale-95 ${theme.softCard}`}>
+                        <Share2 className="w-4 h-4" /> Share
+                      </button>
+                      <button onClick={(event) => { event.stopPropagation(); setStudyAyah(ayah); }} className={`flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs font-bold active:scale-95 ${theme.softCard}`}>
+                        <BookOpen className="w-4 h-4 text-amber-500" /> Study
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
 
-      {/* Tafsir Modal */}
-      {showTafsirModal && (
+      {studyAyah && (
         <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-md bg-slate-900 border border-slate-700 rounded-3xl p-6 space-y-4 shadow-2xl animate-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+          <div className={`w-full max-w-md rounded-3xl p-6 space-y-4 shadow-2xl border ${isLightMode ? 'bg-white border-slate-200 text-slate-900' : 'bg-slate-900 border-slate-700 text-white'}`}>
+            <div className="flex items-center justify-between gap-3 pb-3 border-b border-slate-700/30">
               <div className="flex items-center gap-2">
-                <BookOpen className="w-5 h-5 text-amber-400" />
-                <span className="font-bold text-base text-white">Tafsir Ibn Kathir</span>
+                <BookOpen className="w-5 h-5 text-amber-500" />
+                <span className="font-extrabold">Study note</span>
               </div>
-              <span className="text-xs font-bold text-emerald-400 bg-slate-800 px-3 py-1 rounded-xl">
-                {activeSurah}:{showTafsirModal.numberInSurah}
-              </span>
+              <span className="text-xs font-bold text-emerald-500 bg-emerald-500/10 px-3 py-1 rounded-xl">{activeSurah}:{studyAyah.numberInSurah}</span>
             </div>
-            <p className="text-xl font-quran text-right font-bold text-gold py-2">{showTafsirModal.text}</p>
-            <p className="text-sm text-slate-300 leading-relaxed font-sans border-t border-slate-800 pt-4">
-              {showTafsirModal.tafsir || "This verse brings immense guidance, reminding the reader of Allah's attributes, mercy, and the principles of righteous living."}
+            <p className="font-quran text-right text-gold leading-loose" dir="rtl" style={{ fontSize: `${Math.max(settings.arabic_font_size, 30)}px` }}>
+              {studyAyah.text}
             </p>
-            <button 
-              onClick={() => setShowTafsirModal(null)}
-              className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-2xl transition-all active:scale-95 shadow-lg"
-            >
-              Close Tafsir
+            <p className={`text-sm leading-relaxed ${theme.muted}`}>
+              A verified tafsir source is not bundled in this version yet. To avoid showing incorrect religious explanation, this app currently displays only the Quran text and selected translation here.
+            </p>
+            <p className={`text-sm leading-relaxed ${theme.strongMuted}`}>{studyAyah.translation}</p>
+            <button onClick={() => setStudyAyah(null)} className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-2xl transition-all active:scale-95">
+              Close
             </button>
           </div>
         </div>
       )}
 
-      {/* Active Word Modal */}
-      {activeWord && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-xs bg-slate-900 border border-slate-700 rounded-3xl p-6 text-center space-y-4 shadow-2xl animate-in zoom-in-95 duration-200">
-            <p className="text-xs uppercase font-extrabold tracking-widest text-emerald-400">Word Meaning</p>
-            <p className="text-4xl font-quran font-bold text-gold py-2">{activeWord.arabic}</p>
-            <p className="text-lg font-bold text-white border-t border-slate-800 pt-4">{activeWord.translation}</p>
-            <button 
-              onClick={() => setActiveWord(null)}
-              className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl transition-all"
-            >
-              Dismiss
-            </button>
-          </div>
+      {viewTab === 'reading' && (
+        <div className="fixed bottom-32 right-4 z-40">
+          <button
+            onClick={() => setStudyAyah(ayahs.find((ayah) => ayah.numberInSurah === selectedAyah) || null)}
+            disabled={!selectedAyah || ayahs.length === 0}
+            className="w-12 h-12 rounded-2xl bg-emerald-600 text-white shadow-lg flex items-center justify-center disabled:opacity-50 active:scale-95"
+            aria-label="Open selected ayah study note"
+          >
+            <Tag className="w-5 h-5" />
+          </button>
         </div>
       )}
     </div>
