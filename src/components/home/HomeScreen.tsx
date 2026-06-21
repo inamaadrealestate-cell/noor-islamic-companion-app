@@ -174,8 +174,10 @@ export default function HomeScreen({ setActiveTab, onContinueReading, isLightMod
 
   const surahMeta = SURAH_LIST.find(s => s.number === progress.surah_number) || SURAH_LIST[0];
   const adhkarGoalText = `${adhkarCompletedCount} / ${TOTAL_ADHKAR_ITEMS}`;
+  const arabicWeekday = prayerData?.date.hijri.weekday?.ar || '';
+  const englishWeekday = prayerData?.date.gregorian.weekday?.en || '';
   const dateText = prayerData
-    ? `${prayerData.date.hijri.date} • ${prayerData.date.gregorian.weekday.en}, ${prayerData.date.gregorian.date}`
+    ? `${prayerData.date.hijri.date} • ${arabicWeekday} • ${englishWeekday}, ${prayerData.date.gregorian.date}`
     : 'Preparing today’s Islamic dashboard...';
 
   const searchResults = useMemo<SearchResult[]>(() => {
