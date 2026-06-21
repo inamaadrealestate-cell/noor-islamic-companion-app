@@ -96,7 +96,6 @@ export default function AudioPlayer({
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const objectUrlRef = useRef<string | null>(null);
-  const shouldAutoContinueRef = useRef(false);
   const latestRef = useRef<LatestPlaybackState>({
     currentSurah,
     currentAyah,
@@ -114,38 +113,6 @@ export default function AudioPlayer({
     () => getAudioDownloadKey(reciterId, currentSurah, currentAyah),
     [reciterId, currentSurah, currentAyah],
   );
-
-  const playAudioElement = (
-    audio: HTMLAudioElement,
-    blockedMessage = 'Tap play again. Your browser blocked automatic audio playback.',
-  ) => {
-    setIsBuffering(true);
-
-    const playPromise = audio.play();
-
-    if (playPromise && typeof playPromise.then === 'function') {
-      playPromise
-        .then(() => {
-          shouldAutoContinueRef.current = false;
-          setIsBuffering(false);
-          setPlayerError('');
-        })
-        .catch((error: any) => {
-          setIsBuffering(false);
-
-          // Chrome/Edge can throw AbortError when a source is replaced while a play()
-          // request is still settling. That is not a real audio failure, so do not
-          // stop the player or show the user a scary error.
-          if (error?.name === 'AbortError') {
-            return;
-          }
-
-          shouldAutoContinueRef.current = false;
-          setPlayerError(error?.name === 'NotAllowedError' ? blockedMessage : 'Audio playback was interrupted. Tap play once to continue.');
-          onPlayStateChange(false);
-        });
-    }
-  };
 
   const cardBase = isLightMode
     ? 'bg-white border-slate-200 text-slate-800 shadow-sm'
@@ -213,36 +180,19 @@ export default function AudioPlayer({
 
     const audio = audioRef.current || new Audio();
     audioRef.current = audio;
-    audio.preload = 'auto';
-    audio.crossOrigin = 'anonymous';
+    audio.preload = 'metadata';
     audio.src = effectiveAudioUrl;
     audio.playbackRate = playbackSpeed;
     audio.volume = volume;
 
-    const shouldStartForThisSource = isPlaying || shouldAutoContinueRef.current;
-
     setCurrentTime(0);
     setDuration(0);
     setPlayerError('');
-    setIsBuffering(shouldStartForThisSource);
-
-    let startedForThisSource = false;
-
-    const tryStartForThisSource = () => {
-      if (startedForThisSource || !shouldStartForThisSource) return;
-      startedForThisSource = true;
-      audio.currentTime = 0;
-      playAudioElement(audio, 'Could not continue automatically. Tap play once to unlock audio, then continuous recitation will continue.');
-    };
+    setIsBuffering(isPlaying);
 
     const handleLoadedMetadata = () => {
       setDuration(audio.duration || 0);
-      tryStartForThisSource();
-    };
-
-    const handleCanPlay = () => {
       setIsBuffering(false);
-      tryStartForThisSource();
     };
 
     const handleTimeUpdate = () => {
@@ -261,115 +211,92 @@ export default function AudioPlayer({
 
       if (latest.repeatMode === 'ayah') {
         audio.currentTime = 0;
-        shouldAutoContinueRef.current = true;
-        onPlayStateChange(true);
-        playAudioElement(audio, 'Could not repeat this ayah automatically. Tap play once to continue.');
+        audio.play().catch(() => {
+          setPlayerError('Could not repeat this ayah. Please tap play again.');
+          onPlayStateChange(false);
+        });
         return;
       }
 
       if (latest.repeatMode === 'surah' && latest.currentAyah >= latest.surahAyahs) {
-        shouldAutoContinueRef.current = true;
-        onPlayStateChange(true);
         onVerseChange(latest.currentSurah, 1);
         return;
       }
 
       const nextVerse = getNextVerse(latest.currentSurah, latest.currentAyah);
-      if (nextVerse) {
-        shouldAutoContinueRef.current = true;
-        onPlayStateChange(true);
+      if (nextVerse && latest.currentAyah < latest.surahAyahs) {
         onVerseChange(nextVerse.surah, nextVerse.ayah);
         return;
       }
 
-      shouldAutoContinueRef.current = false;
       onPlayStateChange(false);
     };
 
     const handleError = () => {
       setIsBuffering(false);
-      setPlayerError('Audio could not load from this reciter. Try another reciter or press Ctrl + F5 to clear old cached files.');
+      setPlayerError('Audio could not load. Check your internet connection or try another reciter.');
       onPlayStateChange(false);
     };
 
     audio.addEventListener('loadedmetadata', handleLoadedMetadata);
-    audio.addEventListener('canplay', handleCanPlay);
     audio.addEventListener('timeupdate', handleTimeUpdate);
     audio.addEventListener('waiting', handleWaiting);
     audio.addEventListener('playing', handlePlaying);
     audio.addEventListener('ended', handleEnded);
     audio.addEventListener('error', handleError);
 
-    audio.load();
-    tryStartForThisSource();
+    if (isPlaying) {
+      audio.play().catch(() => {
+        setIsBuffering(false);
+        setPlayerError('Tap play again. Your browser blocked automatic audio playback.');
+        onPlayStateChange(false);
+      });
+    }
 
     return () => {
       audio.pause();
       audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
-      audio.removeEventListener('canplay', handleCanPlay);
       audio.removeEventListener('timeupdate', handleTimeUpdate);
       audio.removeEventListener('waiting', handleWaiting);
       audio.removeEventListener('playing', handlePlaying);
       audio.removeEventListener('ended', handleEnded);
       audio.removeEventListener('error', handleError);
     };
-  }, [effectiveAudioUrl]);
-
+  }, [effectiveAudioUrl, isPlaying, onPlayStateChange, onVerseChange, playbackSpeed, volume]);
 
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
+
     audio.playbackRate = playbackSpeed;
-  }, [playbackSpeed]);
-
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
     audio.volume = volume;
-  }, [volume]);
+  }, [playbackSpeed, volume]);
 
   useEffect(() => {
     const audio = audioRef.current;
-    if (!audio) return;
+    if (!audio || !effectiveAudioUrl) return;
 
     if (isPlaying) {
-      playAudioElement(audio, 'Tap play again once to unlock audio playback.');
+      setIsBuffering(true);
+      audio.play().catch(() => {
+        setIsBuffering(false);
+        setPlayerError('Tap play again. Your browser blocked automatic audio playback.');
+        onPlayStateChange(false);
+      });
     } else {
       audio.pause();
-      shouldAutoContinueRef.current = false;
       setIsBuffering(false);
     }
-  }, [isPlaying]);
-
-  const handleTogglePlayback = () => {
-    const audio = audioRef.current;
-
-    if (isPlaying) {
-      onPlayStateChange(false);
-      return;
-    }
-
-    // This runs inside the user's tap/click event. That is important because
-    // browsers allow audio most reliably when play() is called directly from a
-    // real user gesture, not later inside a React effect.
-    onPlayStateChange(true);
-    if (audio) {
-      playAudioElement(audio, 'Tap play again once to unlock audio playback.');
-    }
-  };
+  }, [isPlaying, effectiveAudioUrl, onPlayStateChange]);
 
   const goPrevious = () => {
     const previousVerse = getPreviousVerse(currentSurah, currentAyah);
-    shouldAutoContinueRef.current = isPlaying;
     onVerseChange(previousVerse.surah, previousVerse.ayah);
   };
 
   const goNext = () => {
     const nextVerse = getNextVerse(currentSurah, currentAyah);
-    if (nextVerse) {
-      shouldAutoContinueRef.current = isPlaying;
-      onVerseChange(nextVerse.surah, nextVerse.ayah);
-    }
+    if (nextVerse) onVerseChange(nextVerse.surah, nextVerse.ayah);
   };
 
   const toggleSpeed = () => {
@@ -466,7 +393,7 @@ export default function AudioPlayer({
             </button>
             <button
               type="button"
-              onClick={handleTogglePlayback}
+              onClick={() => onPlayStateChange(!isPlaying)}
               className="p-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-full transition-all shadow-md active:scale-95"
               aria-label={isPlaying ? 'Pause audio' : 'Play audio'}
             >
@@ -670,7 +597,7 @@ export default function AudioPlayer({
                       </button>
                       <button
                         type="button"
-                        onClick={handleTogglePlayback}
+                        onClick={() => onPlayStateChange(!isPlaying)}
                         className="p-5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-3xl shadow-xl shadow-emerald-900/40 transition-all active:scale-95"
                         aria-label={isPlaying ? 'Pause audio' : 'Play audio'}
                       >

@@ -35,8 +35,6 @@ function createReciterAvatar(label: string, arabicLabel: string, accent: string)
   return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 }
 
-// These servers use EveryAyah's exact folder names. Do not rename the folder strings.
-// Wrong folder names cause the browser to show "Audio could not load" even when the user's internet is strong.
 export const RECITERS_LIST: Reciter[] = [
   {
     id: "ar.alafasy",
@@ -53,7 +51,7 @@ export const RECITERS_LIST: Reciter[] = [
     name: "Abdul Basit Abdul Samad",
     arabicName: "عبد الباسط عبد الصمد",
     style: "Murattal",
-    server: "https://everyayah.com/data/Abdul_Basit_Murattal_64kbps/",
+    server: "https://everyayah.com/data/AbdulSamad_64kbps_QuranExplorer.Com/",
     bitrate: "64 kbps",
     description: "Classic Egyptian recitation with a calm murattal style.",
     photoUrl: createReciterAvatar("AB", "عبد الباسط", "#14b8a6"),
@@ -73,8 +71,8 @@ export const RECITERS_LIST: Reciter[] = [
     name: "Saad Al-Ghamdi",
     arabicName: "سعد الغامدي",
     style: "Murattal",
-    server: "https://everyayah.com/data/Ghamadi_40kbps/",
-    bitrate: "40 kbps",
+    server: "https://everyayah.com/data/Saad_Al_Ghamdi_128kbps/",
+    bitrate: "128 kbps",
     description: "Smooth and steady recitation for memorization.",
     photoUrl: createReciterAvatar("SG", "الغامدي", "#0d9488"),
   },
@@ -83,10 +81,30 @@ export const RECITERS_LIST: Reciter[] = [
     name: "Maher Al Muaiqly",
     arabicName: "ماهر المعيقلي",
     style: "Murattal",
-    server: "https://everyayah.com/data/Maher_AlMuaiqly_64kbps/",
-    bitrate: "64 kbps",
+    server: "https://everyayah.com/data/MaherAlMuaiqly128kbps/",
+    bitrate: "128 kbps",
     description: "Soft recitation commonly used for daily Quran listening.",
     photoUrl: createReciterAvatar("MM", "المعيقلي", "#059669"),
+  },
+  {
+    id: "ar.dosari",
+    name: "Yasser Al-Dosari",
+    arabicName: "ياسر الدوسري",
+    style: "Murattal",
+    server: "https://everyayah.com/data/Yasiir_Al_Dosari_128kbps/",
+    bitrate: "128 kbps",
+    description: "Emotional recitation with a strong rhythm.",
+    photoUrl: createReciterAvatar("YD", "الدوسري", "#16a34a"),
+  },
+  {
+    id: "ar.idris",
+    name: "Idris Abkar",
+    arabicName: "إدريس أبكر",
+    style: "Murattal",
+    server: "https://everyayah.com/data/Idrees_Abkr_192kbps/",
+    bitrate: "192 kbps",
+    description: "Warm, expressive recitation with high audio quality.",
+    photoUrl: createReciterAvatar("IA", "إدريس", "#0f766e"),
   },
   {
     id: "ar.shuraim",
@@ -97,26 +115,6 @@ export const RECITERS_LIST: Reciter[] = [
     bitrate: "64 kbps",
     description: "Recognizable Haram recitation with efficient file size.",
     photoUrl: createReciterAvatar("SS", "الشريم", "#047857"),
-  },
-  {
-    id: "ar.husary",
-    name: "Mahmoud Khalil Al-Husary",
-    arabicName: "محمود خليل الحصري",
-    style: "Murattal",
-    server: "https://everyayah.com/data/Husary_64kbps/",
-    bitrate: "64 kbps",
-    description: "Precise, teaching-friendly recitation.",
-    photoUrl: createReciterAvatar("MH", "الحصري", "#0f766e"),
-  },
-  {
-    id: "ar.minshawi",
-    name: "Muhammad Siddiq Al-Minshawi",
-    arabicName: "محمد صديق المنشاوي",
-    style: "Murattal",
-    server: "https://everyayah.com/data/Minshawy_Murattal_128kbps/",
-    bitrate: "128 kbps",
-    description: "Beautiful classic murattal recitation.",
-    photoUrl: createReciterAvatar("MS", "المنشاوي", "#16a34a"),
   },
 ];
 
