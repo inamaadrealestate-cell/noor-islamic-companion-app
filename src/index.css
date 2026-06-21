@@ -1,0 +1,47 @@
+@import url('https://fonts.googleapis.com/css2?family=Amiri+Quran&family=Amiri:ital,wght@0,400;0,700;1,400&family=Inter:wght@300;400;500;600;700&family=Noto+Naskh+Arabic:wght@400;600;700&display=swap');
+@import "tailwindcss";
+
+@layer base {
+  body {
+    font-family: 'Inter', sans-serif;
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+.font-quran {
+  font-family: 'Amiri Quran', 'Noto Naskh Arabic', serif;
+  line-height: 2.2;
+}
+
+.font-arabic {
+  font-family: 'Noto Naskh Arabic', 'Amiri', serif;
+}
+
+/* Hide scrollbars but keep functionality */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Custom color utility support */
+.bg-islamic-green {
+  background-color: #0F6B4C;
+}
+.text-islamic-green {
+  color: #0F6B4C;
+}
+.border-islamic-green {
+  border-color: #0F6B4C;
+}
+.text-gold {
+  color: #D4AF37;
+}
+.bg-gold {
+  background-color: #D4AF37;
+}
+.border-gold {
+  border-color: #D4AF37;
+}
