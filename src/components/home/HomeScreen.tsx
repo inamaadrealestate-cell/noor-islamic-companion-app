@@ -10,6 +10,8 @@ import {
   Repeat,
   Search,
   Sparkles,
+  Target,
+  CheckCircle,
   X,
 } from 'lucide-react';
 import {
@@ -135,6 +137,36 @@ function contains(value: string | undefined, query: string): boolean {
   return normalize(value || '').includes(query);
 }
 
+const READING_GOAL_KEY = 'noor_daily_quran_page_goal';
+const READING_START_PREFIX = 'noor_daily_quran_start_page_';
+
+function getTodayKey(): string {
+  return new Date().toISOString().split('T')[0];
+}
+
+function readStoredNumber(key: string, fallback: number): number {
+  try {
+    const value = Number(localStorage.getItem(key));
+    return Number.isFinite(value) && value >= 0 ? value : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function loadDailyReadingGoal(): number {
+  return Math.max(1, readStoredNumber(READING_GOAL_KEY, 2));
+}
+
+function loadTodayStartPage(currentPage: number): number {
+  const key = `${READING_START_PREFIX}${getTodayKey()}`;
+  const stored = readStoredNumber(key, currentPage);
+  if (stored < 1) {
+    localStorage.setItem(key, String(currentPage));
+    return currentPage;
+  }
+  return stored;
+}
+
 export default function HomeScreen({ setActiveTab, onContinueReading, isLightMode }: HomeScreenProps) {
   const [prayerData, setPrayerData] = useState<PrayerTimesData | null>(null);
   const [nextPrayer, setNextPrayer] = useState<NextPrayerInfo | null>(null);
@@ -143,6 +175,8 @@ export default function HomeScreen({ setActiveTab, onContinueReading, isLightMod
   const [adhkarCompletedCount, setAdhkarCompletedCount] = useState(0);
   const [prayerLocationLabel, setPrayerLocationLabel] = useState<string>(DEFAULT_PRAYER_LOCATION.label);
   const [searchQuery, setSearchQuery] = useState('');
+  const [readingGoal, setReadingGoal] = useState<number>(() => loadDailyReadingGoal());
+  const [todayStartPage, setTodayStartPage] = useState<number>(() => loadTodayStartPage(Storage.getProgress().page_number || 1));
 
   useEffect(() => {
     const startOfYear = new Date(new Date().getFullYear(), 0, 0).getTime();
@@ -172,6 +206,17 @@ export default function HomeScreen({ setActiveTab, onContinueReading, isLightMod
     return () => clearInterval(interval);
   }, [prayerData]);
 
+  const updateReadingGoal = (goal: number) => {
+    setReadingGoal(goal);
+    localStorage.setItem(READING_GOAL_KEY, String(goal));
+  };
+
+  const resetTodayReadingStart = () => {
+    const currentPage = Math.max(1, progress.page_number || 1);
+    localStorage.setItem(`${READING_START_PREFIX}${getTodayKey()}`, String(currentPage));
+    setTodayStartPage(currentPage);
+  };
+
   const surahMeta = SURAH_LIST.find(s => s.number === progress.surah_number) || SURAH_LIST[0];
   const adhkarGoalText = `${adhkarCompletedCount} / ${TOTAL_ADHKAR_ITEMS}`;
   const arabicWeekday = prayerData?.date.hijri.weekday?.ar || '';
@@ -179,6 +224,10 @@ export default function HomeScreen({ setActiveTab, onContinueReading, isLightMod
   const dateText = prayerData
     ? `${prayerData.date.hijri.date} • ${arabicWeekday} • ${englishWeekday}, ${prayerData.date.gregorian.date}`
     : 'Preparing today’s Islamic dashboard...';
+  const currentPage = Math.max(1, progress.page_number || 1);
+  const pagesReadToday = Math.max(0, currentPage - todayStartPage);
+  const readingGoalPercent = Math.min(100, Math.round((pagesReadToday / Math.max(1, readingGoal)) * 100));
+  const readingGoalDone = pagesReadToday >= readingGoal;
 
   const searchResults = useMemo<SearchResult[]>(() => {
     const query = normalize(searchQuery);
@@ -436,6 +485,60 @@ export default function HomeScreen({ setActiveTab, onContinueReading, isLightMod
             )}
           </div>
         )}
+      </section>
+
+      <section className={`rounded-3xl border p-5 ${cardBg}`}>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2 text-emerald-500">
+              <Target className="h-5 w-5" />
+              <h2 className={`text-base font-black ${strongText}`}>Daily Quran Goal</h2>
+            </div>
+            <p className={`mt-1 text-xs leading-relaxed ${mutedText}`}>Track today’s reading progress from your saved page.</p>
+          </div>
+          <div className={`rounded-2xl px-3 py-2 text-center ${readingGoalDone ? 'bg-emerald-600 text-white' : isLightMode ? 'bg-slate-100 text-slate-700' : 'bg-slate-900 text-slate-300'}`}>
+            {readingGoalDone ? <CheckCircle className="mx-auto h-4 w-4" /> : <BookOpen className="mx-auto h-4 w-4" />}
+            <p className="mt-1 text-[10px] font-black uppercase">{readingGoalDone ? 'Done' : 'Goal'}</p>
+          </div>
+        </div>
+
+        <div className="mt-5 flex items-end justify-between gap-4">
+          <div>
+            <p className={`text-4xl font-black ${strongText}`}>{pagesReadToday}</p>
+            <p className={`text-xs font-bold ${mutedText}`}>pages today / {readingGoal} page goal</p>
+          </div>
+          <button
+            onClick={() => onContinueReading(progress.surah_number, progress.ayah_number)}
+            className="rounded-2xl bg-emerald-600 px-4 py-3 text-xs font-black text-white shadow active:scale-95"
+            type="button"
+          >
+            Continue
+          </button>
+        </div>
+
+        <div className={`mt-4 h-3 overflow-hidden rounded-full ${isLightMode ? 'bg-slate-100' : 'bg-slate-900'}`}>
+          <div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${readingGoalPercent}%` }} />
+        </div>
+
+        <div className="mt-4 flex flex-wrap gap-2">
+          {[1, 2, 5, 10].map((goal) => (
+            <button
+              key={goal}
+              onClick={() => updateReadingGoal(goal)}
+              className={`rounded-xl border px-3 py-2 text-[11px] font-black transition-all active:scale-95 ${readingGoal === goal ? 'border-emerald-500 bg-emerald-600 text-white' : isLightMode ? 'border-slate-200 bg-slate-50 text-slate-600' : 'border-slate-700 bg-slate-900 text-slate-300'}`}
+              type="button"
+            >
+              {goal} page{goal > 1 ? 's' : ''}
+            </button>
+          ))}
+          <button
+            onClick={resetTodayReadingStart}
+            className={`rounded-xl border px-3 py-2 text-[11px] font-black transition-all active:scale-95 ${isLightMode ? 'border-slate-200 bg-slate-50 text-slate-600' : 'border-slate-700 bg-slate-900 text-slate-300'}`}
+            type="button"
+          >
+            Start from page {currentPage}
+          </button>
+        </div>
       </section>
 
       <div className="grid grid-cols-2 gap-4">
