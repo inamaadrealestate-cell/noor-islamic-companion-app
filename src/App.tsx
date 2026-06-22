@@ -21,13 +21,67 @@ type AppTab = "home" | "quran" | "prayer" | "adhkar" | "tasbih" | "qibla" | "set
 const VALID_TABS: AppTab[] = ["home", "quran", "prayer", "adhkar", "tasbih", "qibla", "settings"];
 const LAST_TAB_KEY = "noor_active_tab";
 
+function safeLocalGet(key: string): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function safeLocalSet(key: string, value: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {}
+}
+
+function safeLocalRemove(key: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.removeItem(key);
+  } catch {}
+}
+
+function safeMatchMedia(query: string): MediaQueryList | null {
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") return null;
+  try {
+    return window.matchMedia(query);
+  } catch {
+    return null;
+  }
+}
+
+function onMediaQueryChange(queryList: MediaQueryList | null, callback: () => void): () => void {
+  if (!queryList) return () => {};
+
+  const modernList = queryList as MediaQueryList & {
+    addEventListener?: (type: "change", listener: () => void) => void;
+    removeEventListener?: (type: "change", listener: () => void) => void;
+    addListener?: (listener: () => void) => void;
+    removeListener?: (listener: () => void) => void;
+  };
+
+  if (typeof modernList.addEventListener === "function") {
+    modernList.addEventListener("change", callback);
+    return () => modernList.removeEventListener?.("change", callback);
+  }
+
+  if (typeof modernList.addListener === "function") {
+    modernList.addListener(callback);
+    return () => modernList.removeListener?.(callback);
+  }
+
+  return () => {};
+}
+
 function isValidTab(tab: string | null): tab is AppTab {
   return Boolean(tab && VALID_TABS.includes(tab as AppTab));
 }
 
 function getInitialTab(): AppTab {
-  if (typeof window === "undefined") return "home";
-  const savedTab = window.localStorage.getItem(LAST_TAB_KEY);
+  const savedTab = safeLocalGet(LAST_TAB_KEY);
   return isValidTab(savedTab) ? savedTab : "home";
 }
 
@@ -39,8 +93,8 @@ function getInitialOnlineState(): boolean {
 function isRunningAsInstalledApp(): boolean {
   if (typeof window === "undefined") return false;
 
-  const standaloneDisplay = window.matchMedia?.("(display-mode: standalone)").matches ?? false;
-  const fullscreenDisplay = window.matchMedia?.("(display-mode: fullscreen)").matches ?? false;
+  const standaloneDisplay = safeMatchMedia("(display-mode: standalone)")?.matches ?? false;
+  const fullscreenDisplay = safeMatchMedia("(display-mode: fullscreen)")?.matches ?? false;
   const iosStandalone = Boolean(
     (window.navigator as Navigator & { standalone?: boolean }).standalone,
   );
@@ -50,7 +104,12 @@ function isRunningAsInstalledApp(): boolean {
 
 function isLikelyIos(): boolean {
   if (typeof navigator === "undefined") return false;
-  return /iphone|ipad|ipod/i.test(navigator.userAgent);
+
+  const userAgent = navigator.userAgent || "";
+  const platform = navigator.platform || "";
+  const maxTouchPoints = Number(navigator.maxTouchPoints || 0);
+
+  return /iphone|ipad|ipod/i.test(userAgent) || (platform === "MacIntel" && maxTouchPoints > 1);
 }
 
 declare global {
@@ -89,7 +148,7 @@ class AppErrorBoundary extends Component<AppErrorBoundaryProps, AppErrorBoundary
   };
 
   private handleResetView = () => {
-    window.localStorage.removeItem(LAST_TAB_KEY);
+    safeLocalRemove(LAST_TAB_KEY);
     window.location.reload();
   };
 
@@ -151,6 +210,7 @@ export default function App() {
   const [showInstallButton, setShowInstallButton] = useState<boolean>(false);
   const [installHint, setInstallHint] = useState<string>("");
   const [showInstallGuide, setShowInstallGuide] = useState<boolean>(false);
+  const [isInstallPromptRunning, setIsInstallPromptRunning] = useState<boolean>(false);
   const [deferredInstallPrompt, setDeferredInstallPrompt] =
     useState<BeforeInstallPromptEvent | null>(null);
 
@@ -177,14 +237,18 @@ export default function App() {
     document.documentElement.style.overflowY = "auto";
 
     document.body.style.height = "auto";
-    document.body.style.minHeight = "100svh";
+    const supportsSmallViewport =
+      typeof CSS !== "undefined" && typeof CSS.supports === "function" && CSS.supports("height", "100svh");
+
+    document.body.style.minHeight = supportsSmallViewport ? "100svh" : "100vh";
     document.body.style.overflowX = "hidden";
     document.body.style.overflowY = "auto";
     document.body.style.touchAction = "pan-y pinch-zoom";
+    (document.body.style as CSSStyleDeclaration & { webkitOverflowScrolling?: string }).webkitOverflowScrolling = "touch";
   }, [isLightMode]);
 
   useEffect(() => {
-    window.localStorage.setItem(LAST_TAB_KEY, activeTab);
+    safeLocalSet(LAST_TAB_KEY, activeTab);
   }, [activeTab]);
 
   useEffect(() => {
@@ -219,13 +283,22 @@ export default function App() {
       setShowInstallButton(!isRunningAsInstalledApp());
     };
 
-    const handleInstallPromptReady = (event: Event) => {
-      event.preventDefault();
-      const installEvent = event as BeforeInstallPromptEvent;
+    const rememberInstallPrompt = (installEvent: BeforeInstallPromptEvent | undefined) => {
+      if (!installEvent) return;
       window.noorDeferredInstallPrompt = installEvent;
       setDeferredInstallPrompt(installEvent);
       setShowInstallButton(!isRunningAsInstalledApp());
+      setShowInstallGuide(false);
       setInstallHint("");
+    };
+
+    const handleInstallPromptReady = (event: Event) => {
+      event.preventDefault();
+      rememberInstallPrompt(event as BeforeInstallPromptEvent);
+    };
+
+    const handleStoredInstallPromptReady = () => {
+      rememberInstallPrompt(window.noorDeferredInstallPrompt);
     };
 
     const handleAppInstalled = () => {
@@ -234,29 +307,44 @@ export default function App() {
       setShowInstallButton(false);
       setShowInstallGuide(false);
       setInstallHint("");
+      setIsInstallPromptRunning(false);
     };
 
     updateInstallButtonVisibility();
+    rememberInstallPrompt(window.noorDeferredInstallPrompt);
 
-    if (window.noorDeferredInstallPrompt) {
-      setDeferredInstallPrompt(window.noorDeferredInstallPrompt);
-    }
+    const unsubscribeStandalone = onMediaQueryChange(
+      safeMatchMedia("(display-mode: standalone)"),
+      updateInstallButtonVisibility,
+    );
+    const unsubscribeFullscreen = onMediaQueryChange(
+      safeMatchMedia("(display-mode: fullscreen)"),
+      updateInstallButtonVisibility,
+    );
 
     window.addEventListener("beforeinstallprompt", handleInstallPromptReady);
+    window.addEventListener("noor-install-ready", handleStoredInstallPromptReady);
     window.addEventListener("appinstalled", handleAppInstalled);
-    window.matchMedia?.("(display-mode: standalone)").addEventListener?.("change", updateInstallButtonVisibility);
+    window.addEventListener("pageshow", updateInstallButtonVisibility);
 
     return () => {
       window.removeEventListener("beforeinstallprompt", handleInstallPromptReady);
+      window.removeEventListener("noor-install-ready", handleStoredInstallPromptReady);
       window.removeEventListener("appinstalled", handleAppInstalled);
-      window.matchMedia?.("(display-mode: standalone)").removeEventListener?.("change", updateInstallButtonVisibility);
+      window.removeEventListener("pageshow", updateInstallButtonVisibility);
+      unsubscribeStandalone();
+      unsubscribeFullscreen();
     };
   }, []);
 
   const setActiveTab = (tab: string) => {
     if (isValidTab(tab)) {
       setActiveTabState(tab);
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      try {
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      } catch {
+        window.scrollTo(0, 0);
+      }
     }
   };
 
@@ -289,6 +377,8 @@ export default function App() {
   };
 
   const handleInstallApp = async () => {
+    if (isInstallPromptRunning) return;
+
     setInstallHint("");
 
     if (isRunningAsInstalledApp()) {
@@ -300,7 +390,9 @@ export default function App() {
     const installEvent = deferredInstallPrompt || window.noorDeferredInstallPrompt || null;
 
     if (installEvent) {
+      setIsInstallPromptRunning(true);
       try {
+        setShowInstallGuide(false);
         setInstallHint("Opening install...");
         await installEvent.prompt();
         const choice = await installEvent.userChoice.catch(() => null);
@@ -315,16 +407,21 @@ export default function App() {
           return;
         }
 
-        setInstallHint("Install was cancelled");
+        setInstallHint("Install cancelled");
         setShowInstallGuide(true);
         window.setTimeout(() => setInstallHint(""), 3000);
         return;
       } catch {
         window.noorDeferredInstallPrompt = undefined;
         setDeferredInstallPrompt(null);
+      } finally {
+        setIsInstallPromptRunning(false);
       }
     }
 
+    // Browsers do not allow websites to silently install a PWA. If the native
+    // beforeinstallprompt event is unavailable, there is no safe direct install
+    // API, so keep the user on the same page and show the browser install steps.
     setInstallHint(isLikelyIos() ? "Use Share, then Add to Home Screen" : "Tap menu, then Install app");
     setShowInstallGuide(true);
     window.setTimeout(() => setInstallHint(""), 4200);
@@ -389,16 +486,17 @@ export default function App() {
             <button
               type="button"
               onClick={handleInstallApp}
+              disabled={isInstallPromptRunning}
               aria-label="Install NoorQuran app"
               title="Install NoorQuran app"
-              className={`pointer-events-auto group relative flex h-11 w-11 items-center justify-center overflow-visible rounded-2xl border shadow-2xl active:scale-95 ${
+              className={`pointer-events-auto group relative flex h-11 w-11 items-center justify-center overflow-visible rounded-2xl border shadow-2xl active:scale-95 disabled:opacity-70 ${
                 isLightMode
                   ? "border-emerald-200 bg-white text-emerald-700 shadow-emerald-900/15"
                   : "border-emerald-500/40 bg-slate-900 text-emerald-300 shadow-emerald-950/40"
               }`}
             >
               <span className="absolute -inset-1 rounded-[1.15rem] bg-emerald-400/25 blur-md transition-opacity group-hover:opacity-100" />
-              <span className="relative flex h-full w-full animate-bounce items-center justify-center rounded-2xl bg-emerald-600 text-white">
+              <span className={`relative flex h-full w-full items-center justify-center rounded-2xl bg-emerald-600 text-white ${isInstallPromptRunning ? "" : "animate-bounce"}`}>
                 <Download className="h-5 w-5" strokeWidth={2.7} />
               </span>
             </button>

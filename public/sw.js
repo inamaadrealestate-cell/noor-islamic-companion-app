@@ -1,5 +1,5 @@
-const CACHE_NAME = "noorquran-shell-v6-offline-core";
-const CONTENT_CACHE_NAME = "noorquran-content-v6-offline-core";
+const CACHE_NAME = "noorquran-shell-v7-safari-safe";
+const CONTENT_CACHE_NAME = "noorquran-content-v7-safari-safe";
 
 const APP_SHELL = [
   "/",
@@ -21,88 +21,145 @@ const CONTENT_HOSTS = [
 ];
 
 function isContentRequest(url) {
-  return CONTENT_HOSTS.some((host) => url.hostname === host || url.hostname.endsWith(`.${host}`));
+  return CONTENT_HOSTS.some(function (host) {
+    return url.hostname === host || url.hostname.endsWith("." + host);
+  });
+}
+
+async function openCacheSafe(cacheName) {
+  try {
+    if (typeof caches === "undefined") return null;
+    return await caches.open(cacheName);
+  } catch (error) {
+    return null;
+  }
+}
+
+async function cacheAppShellSafe() {
+  const cache = await openCacheSafe(CACHE_NAME);
+  if (!cache) return;
+
+  await Promise.all(
+    APP_SHELL.map(async function (url) {
+      try {
+        const response = await fetch(url, { cache: "reload" });
+        if (response && response.ok) await cache.put(url, response.clone());
+      } catch (error) {
+        // A missing icon/page or Safari cache restriction must not break installation.
+      }
+    }),
+  );
 }
 
 async function putSafe(cacheName, request, response) {
   try {
     if (!response || !response.ok) return;
-    const cache = await caches.open(cacheName);
+    const cache = await openCacheSafe(cacheName);
+    if (!cache) return;
     await cache.put(request, response.clone());
-  } catch {
-    // Cache storage can fail on private mode, storage pressure, opaque responses, or browser limits.
+  } catch (error) {
+    // Cache storage can fail in private mode, storage pressure, or Safari restrictions.
+  }
+}
+
+async function matchSafe(request) {
+  try {
+    if (typeof caches === "undefined") return undefined;
+    return await caches.match(request);
+  } catch (error) {
+    return undefined;
   }
 }
 
 async function networkFirst(request, cacheName) {
-  const cached = await caches.match(request);
+  const cached = await matchSafe(request);
 
   try {
     const response = await fetch(request);
     putSafe(cacheName, request, response);
     return response;
-  } catch {
+  } catch (error) {
     return cached || Response.error();
   }
 }
 
 async function staleWhileRevalidate(request, cacheName) {
-  const cached = await caches.match(request);
+  const cached = await matchSafe(request);
 
   const fetchPromise = fetch(request)
-    .then((response) => {
+    .then(function (response) {
       putSafe(cacheName, request, response);
       return response;
     })
-    .catch(() => cached);
+    .catch(function () {
+      return cached;
+    });
 
   return cached || fetchPromise;
 }
 
-self.addEventListener("install", (event) => {
-  event.waitUntil(
-    caches
-      .open(CACHE_NAME)
-      .then((cache) => cache.addAll(APP_SHELL))
-      .then(() => self.skipWaiting()),
-  );
+self.addEventListener("install", function (event) {
+  event.waitUntil(cacheAppShellSafe().then(function () {
+    return self.skipWaiting();
+  }));
 });
 
-self.addEventListener("activate", (event) => {
+self.addEventListener("activate", function (event) {
   event.waitUntil(
-    caches
-      .keys()
-      .then((keys) =>
-        Promise.all(
+    (typeof caches === "undefined"
+      ? Promise.resolve([])
+      : caches.keys()
+    )
+      .then(function (keys) {
+        return Promise.all(
           keys
-            .filter((key) => key.startsWith("noorquran-") && key !== CACHE_NAME && key !== CONTENT_CACHE_NAME)
-            .map((key) => caches.delete(key)),
-        ),
-      )
-      .then(() => self.clients.claim()),
+            .filter(function (key) {
+              return key.indexOf("noorquran-") === 0 && key !== CACHE_NAME && key !== CONTENT_CACHE_NAME;
+            })
+            .map(function (key) {
+              try {
+                return caches.delete(key);
+              } catch (error) {
+                return Promise.resolve(false);
+              }
+            }),
+        );
+      })
+      .then(function () {
+        return self.clients.claim();
+      }),
   );
 });
 
-self.addEventListener("message", (event) => {
-  if (event.data?.type === "SKIP_WAITING") {
+self.addEventListener("message", function (event) {
+  if (event.data && event.data.type === "SKIP_WAITING") {
     self.skipWaiting();
   }
 });
 
-self.addEventListener("fetch", (event) => {
+self.addEventListener("fetch", function (event) {
   const request = event.request;
-  if (request.method !== "GET") return;
+  if (!request || request.method !== "GET") return;
 
-  const url = new URL(request.url);
+  let url;
+  try {
+    url = new URL(request.url);
+  } catch (error) {
+    return;
+  }
 
   if (request.mode === "navigate") {
     event.respondWith(
       fetch(request)
-        .then((response) => {
+        .then(function (response) {
           putSafe(CACHE_NAME, "/index.html", response);
           return response;
         })
-        .catch(() => caches.match("/index.html").then((response) => response || caches.match("/"))),
+        .catch(function () {
+          return matchSafe("/index.html").then(function (response) {
+            return response || matchSafe("/");
+          });
+        }),
     );
     return;
   }
@@ -117,14 +174,16 @@ self.addEventListener("fetch", (event) => {
   }
 });
 
-self.addEventListener("notificationclick", (event) => {
+self.addEventListener("notificationclick", function (event) {
   event.notification.close();
-  const targetUrl = event.notification?.data?.url || "/";
+  const targetUrl = event.notification && event.notification.data && event.notification.data.url
+    ? event.notification.data.url
+    : "/";
 
   event.waitUntil(
     self.clients
       .matchAll({ type: "window", includeUncontrolled: true })
-      .then((clientList) => {
+      .then(function (clientList) {
         for (const client of clientList) {
           if ("focus" in client) {
             client.focus();

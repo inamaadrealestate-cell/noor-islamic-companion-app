@@ -107,7 +107,11 @@ function loadPersonalNotes(): PersonalAyahNote[] {
 }
 
 function savePersonalNotes(notes: PersonalAyahNote[]) {
-  localStorage.setItem(NOTES_STORAGE_KEY, JSON.stringify(notes));
+  try {
+    localStorage.setItem(NOTES_STORAGE_KEY, JSON.stringify(notes));
+  } catch {
+    // Storage may be full or blocked. Keep the app running without crashing.
+  }
 }
 
 const QURAN_SURAH_CACHE_PREFIX = "noor_quran_surah_cache_v1";

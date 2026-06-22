@@ -45,6 +45,15 @@ interface PrayerTimingsCache {
 }
 
 const SERVICE_WORKER_PATH = "/sw.js";
+
+function hasWindow(): boolean {
+  return typeof window !== "undefined";
+}
+
+function hasNavigator(): boolean {
+  return typeof navigator !== "undefined";
+}
+
 const REMINDER_STORAGE_KEY = "noor_adhkar_reminder_settings";
 const REMINDER_FIRED_KEY = "noor_adhkar_reminders_fired";
 const PRAYER_LOCATION_STORAGE_KEY = "noor_prayer_location";
@@ -79,18 +88,40 @@ declare global {
 }
 
 function isStandaloneMode(): boolean {
-  const standaloneMedia = window.matchMedia("(display-mode: standalone)").matches;
+  if (!hasWindow()) return false;
+  const standaloneMedia = window.matchMedia?.("(display-mode: standalone)").matches ?? false;
   const navigatorStandalone = Boolean(
     (window.navigator as Navigator & { standalone?: boolean }).standalone,
   );
   return standaloneMedia || navigatorStandalone;
 }
 
+function safeDispatchEvent(eventName: string, detail?: unknown): void {
+  if (!hasWindow()) return;
+
+  try {
+    if (typeof detail === "undefined") {
+      window.dispatchEvent(new Event(eventName));
+      return;
+    }
+
+    window.dispatchEvent(new CustomEvent(eventName, { detail }));
+    return;
+  } catch {}
+
+  try {
+    const event = document.createEvent("Event");
+    event.initEvent(eventName, false, false);
+    window.dispatchEvent(event);
+  } catch {}
+}
+
 function dispatchUpdateAvailable(): void {
-  window.dispatchEvent(new Event("noor-update-available"));
+  safeDispatchEvent("noor-update-available");
 }
 
 function safeGet(key: string): string | null {
+  if (!hasWindow()) return null;
   try {
     return window.localStorage.getItem(key);
   } catch {
@@ -99,6 +130,7 @@ function safeGet(key: string): string | null {
 }
 
 function safeSet(key: string, value: string): void {
+  if (!hasWindow()) return;
   try {
     window.localStorage.setItem(key, value);
   } catch {}
@@ -178,7 +210,7 @@ export function getAdhkarReminderSettings(): NoorAdhkarReminderSettings {
 export function saveAdhkarReminderSettings(settings: NoorAdhkarReminderSettings): void {
   safeSet(REMINDER_STORAGE_KEY, JSON.stringify(settings));
   restartNoorReminderScheduler();
-  window.dispatchEvent(new CustomEvent("noor-adhkar-reminders-changed", { detail: settings }));
+  safeDispatchEvent("noor-adhkar-reminders-changed", settings);
 }
 
 export function resetAdhkarReminderSettings(): NoorAdhkarReminderSettings {
@@ -187,12 +219,12 @@ export function resetAdhkarReminderSettings(): NoorAdhkarReminderSettings {
 }
 
 export function getPrayerNotificationStatus(): NoorNotificationStatus {
-  if (!("Notification" in window)) return "unsupported";
+  if (!hasWindow() || !("Notification" in window)) return "unsupported";
   return Notification.permission as NoorNotificationStatus;
 }
 
 export async function registerNoorServiceWorker(): Promise<ServiceWorkerRegistration | null> {
-  if (!("serviceWorker" in navigator)) return null;
+  if (!hasNavigator() || !("serviceWorker" in navigator)) return null;
 
   try {
     const registration = await navigator.serviceWorker.register(SERVICE_WORKER_PATH);
@@ -225,12 +257,33 @@ export async function registerNoorServiceWorker(): Promise<ServiceWorkerRegistra
   }
 }
 
+async function requestNotificationPermissionCompat(): Promise<NoorNotificationStatus> {
+  if (!hasWindow() || !("Notification" in window)) return "unsupported";
+
+  try {
+    const requestPermission = Notification.requestPermission.bind(Notification) as (
+      callback?: (permission: NotificationPermission) => void,
+    ) => Promise<NotificationPermission> | void;
+
+    const permission = await new Promise<NotificationPermission>((resolve) => {
+      const maybePromise = requestPermission((callbackPermission) => resolve(callbackPermission));
+      if (maybePromise && typeof (maybePromise as Promise<NotificationPermission>).then === "function") {
+        (maybePromise as Promise<NotificationPermission>).then(resolve).catch(() => resolve(Notification.permission));
+      }
+    });
+
+    return permission as NoorNotificationStatus;
+  } catch {
+    return Notification.permission as NoorNotificationStatus;
+  }
+}
+
 export async function requestPrayerNotificationPermission(): Promise<{
   status: NoorNotificationStatus;
   serviceWorkerReady: boolean;
   message: string;
 }> {
-  if (!("Notification" in window)) {
+  if (!hasWindow() || !("Notification" in window)) {
     return {
       status: "unsupported",
       serviceWorkerReady: false,
@@ -239,8 +292,7 @@ export async function requestPrayerNotificationPermission(): Promise<{
   }
 
   const registration = await registerNoorServiceWorker();
-  const permission = await Notification.requestPermission();
-  const status = permission as NoorNotificationStatus;
+  const status = await requestNotificationPermissionCompat();
 
   if (status === "granted") {
     startNoorReminderScheduler();
@@ -275,7 +327,7 @@ async function showNoorNotification(options: {
   tag: string;
   url?: string;
 }): Promise<boolean> {
-  if (!("Notification" in window) || Notification.permission !== "granted") return false;
+  if (!hasWindow() || !("Notification" in window) || Notification.permission !== "granted") return false;
 
   const registration = await registerNoorServiceWorker();
   const payload: NotificationOptions = {
@@ -286,13 +338,19 @@ async function showNoorNotification(options: {
     data: { url: options.url || "/" },
   };
 
-  if (registration?.showNotification) {
-    await registration.showNotification(options.title, payload);
-    return true;
-  }
+  try {
+    if (registration && typeof registration.showNotification === "function") {
+      await registration.showNotification(options.title, payload);
+      return true;
+    }
+  } catch {}
 
-  new Notification(options.title, payload);
-  return true;
+  try {
+    new Notification(options.title, payload);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export async function showPrayerNotificationTest(): Promise<boolean> {
@@ -504,7 +562,7 @@ async function runReminderTick(): Promise<void> {
   try {
     const settings = getAdhkarReminderSettings();
     if (!settings.enabled) return;
-    if (!("Notification" in window) || Notification.permission !== "granted") return;
+    if (!hasWindow() || !("Notification" in window) || Notification.permission !== "granted") return;
 
     const now = new Date();
     const currentTime = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
@@ -517,7 +575,7 @@ async function runReminderTick(): Promise<void> {
 }
 
 export function startNoorReminderScheduler(): void {
-  if (reminderIntervalId !== null) return;
+  if (!hasWindow() || reminderIntervalId !== null) return;
 
   runReminderTick().catch(() => undefined);
   reminderIntervalId = window.setInterval(() => {
@@ -537,11 +595,12 @@ export function restartNoorReminderScheduler(): void {
 }
 
 function setupInstallPrompt(): void {
-  if (isStandaloneMode()) return;
+  if (!hasWindow() || isStandaloneMode()) return;
 
   window.addEventListener("beforeinstallprompt", (rawEvent) => {
     rawEvent.preventDefault();
     window.noorDeferredInstallPrompt = rawEvent as BeforeInstallPromptEvent;
+    safeDispatchEvent("noor-install-ready");
   });
 
   window.noorPromptInstall = async () => {
@@ -558,24 +617,28 @@ function setupInstallPrompt(): void {
   });
 }
 
-window.noorApplyUpdate = async () => {
-  const registration = await navigator.serviceWorker?.getRegistration(SERVICE_WORKER_PATH);
-  if (registration?.waiting) {
-    registration.waiting.postMessage({ type: "SKIP_WAITING" });
-    return;
-  }
-  window.location.reload();
-};
+if (hasWindow()) {
+  window.noorApplyUpdate = async () => {
+    const registration = hasNavigator()
+      ? await navigator.serviceWorker.getRegistration(SERVICE_WORKER_PATH)
+      : null;
+    if (registration?.waiting) {
+      registration.waiting.postMessage({ type: "SKIP_WAITING" });
+      return;
+    }
+    window.location.reload();
+  };
 
-window.addEventListener("load", () => {
-  registerNoorServiceWorker().catch(() => undefined);
-  startNoorReminderScheduler();
-});
+  window.addEventListener("load", () => {
+    registerNoorServiceWorker().catch(() => undefined);
+    startNoorReminderScheduler();
+  });
 
-window.addEventListener("storage", (event) => {
-  if (event.key === REMINDER_STORAGE_KEY || event.key === "noor_settings" || event.key === PRAYER_LOCATION_STORAGE_KEY) {
-    restartNoorReminderScheduler();
-  }
-});
+  window.addEventListener("storage", (event) => {
+    if (event.key === REMINDER_STORAGE_KEY || event.key === "noor_settings" || event.key === PRAYER_LOCATION_STORAGE_KEY) {
+      restartNoorReminderScheduler();
+    }
+  });
 
-setupInstallPrompt();
+  setupInstallPrompt();
+}

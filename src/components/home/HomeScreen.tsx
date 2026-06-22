@@ -153,6 +153,14 @@ function readStoredNumber(key: string, fallback: number): number {
   }
 }
 
+function writeStoredNumber(key: string, value: number): void {
+  try {
+    localStorage.setItem(key, String(value));
+  } catch {
+    // Some private/restricted browsers can block localStorage writes.
+  }
+}
+
 function loadDailyReadingGoal(): number {
   return Math.max(1, readStoredNumber(READING_GOAL_KEY, 2));
 }
@@ -161,7 +169,7 @@ function loadTodayStartPage(currentPage: number): number {
   const key = `${READING_START_PREFIX}${getTodayKey()}`;
   const stored = readStoredNumber(key, currentPage);
   if (stored < 1) {
-    localStorage.setItem(key, String(currentPage));
+    writeStoredNumber(key, currentPage);
     return currentPage;
   }
   return stored;
@@ -208,12 +216,12 @@ export default function HomeScreen({ setActiveTab, onContinueReading, isLightMod
 
   const updateReadingGoal = (goal: number) => {
     setReadingGoal(goal);
-    localStorage.setItem(READING_GOAL_KEY, String(goal));
+    writeStoredNumber(READING_GOAL_KEY, goal);
   };
 
   const resetTodayReadingStart = () => {
     const currentPage = Math.max(1, progress.page_number || 1);
-    localStorage.setItem(`${READING_START_PREFIX}${getTodayKey()}`, String(currentPage));
+    writeStoredNumber(`${READING_START_PREFIX}${getTodayKey()}`, currentPage);
     setTodayStartPage(currentPage);
   };
 
