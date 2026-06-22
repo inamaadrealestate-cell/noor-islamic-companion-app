@@ -76,6 +76,7 @@ const DEFAULT_PRAYER_LOCATION: PrayerLocationCache = {
 };
 
 let serviceWorkerReloading = false;
+let serviceWorkerControllerListenerAttached = false;
 let reminderIntervalId: number | null = null;
 let reminderTickInProgress = false;
 
@@ -87,13 +88,29 @@ declare global {
   }
 }
 
+function safeDisplayModeMatches(mode: "standalone" | "fullscreen"): boolean {
+  if (!hasWindow() || typeof window.matchMedia !== "function") return false;
+
+  try {
+    return Boolean(window.matchMedia(`(display-mode: ${mode})`).matches);
+  } catch {
+    return false;
+  }
+}
+
 function isStandaloneMode(): boolean {
   if (!hasWindow()) return false;
-  const standaloneMedia = window.matchMedia?.("(display-mode: standalone)").matches ?? false;
-  const navigatorStandalone = Boolean(
-    (window.navigator as Navigator & { standalone?: boolean }).standalone,
-  );
-  return standaloneMedia || navigatorStandalone;
+
+  let navigatorStandalone = false;
+  try {
+    navigatorStandalone = Boolean(
+      (window.navigator as Navigator & { standalone?: boolean }).standalone,
+    );
+  } catch {
+    navigatorStandalone = false;
+  }
+
+  return safeDisplayModeMatches("standalone") || safeDisplayModeMatches("fullscreen") || navigatorStandalone;
 }
 
 function safeDispatchEvent(eventName: string, detail?: unknown): void {
@@ -244,11 +261,18 @@ export async function registerNoorServiceWorker(): Promise<ServiceWorkerRegistra
       });
     });
 
-    navigator.serviceWorker.addEventListener("controllerchange", () => {
-      if (serviceWorkerReloading) return;
-      serviceWorkerReloading = true;
-      window.location.reload();
-    });
+    if (!serviceWorkerControllerListenerAttached) {
+      serviceWorkerControllerListenerAttached = true;
+      navigator.serviceWorker.addEventListener("controllerchange", () => {
+        if (serviceWorkerReloading) return;
+        serviceWorkerReloading = true;
+        try {
+          window.location.reload();
+        } catch {
+          // If reload is blocked by the browser, keep the current app session alive.
+        }
+      });
+    }
 
     registration.update().catch(() => undefined);
     return registration;
@@ -659,7 +683,11 @@ if (hasWindow()) {
       }
     }
 
-    window.location.reload();
+    try {
+      window.location.reload();
+    } catch {
+      // Keep the current session alive if a restricted browser blocks reload.
+    }
   };
 
   const startNoorPwaRuntime = () => {
