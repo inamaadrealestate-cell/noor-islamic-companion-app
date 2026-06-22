@@ -414,10 +414,15 @@ export default function App() {
   };
 
   const handleApplyUpdate = async () => {
-    if (window.noorApplyUpdate) {
-      await window.noorApplyUpdate();
-      return;
+    try {
+      if (window.noorApplyUpdate) {
+        await window.noorApplyUpdate();
+        return;
+      }
+    } catch {
+      // If the browser blocks service-worker update checks, fall back to a normal reload.
     }
+
     window.location.reload();
   };
 

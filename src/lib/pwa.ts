@@ -640,13 +640,25 @@ function setupInstallPrompt(): void {
 
 if (hasWindow()) {
   window.noorApplyUpdate = async () => {
-    const registration = hasNavigator()
-      ? await navigator.serviceWorker.getRegistration()
-      : null;
-    if (registration?.waiting) {
-      registration.waiting.postMessage({ type: "SKIP_WAITING" });
-      return;
+    let registration: ServiceWorkerRegistration | null = null;
+
+    try {
+      registration = hasNavigator() && "serviceWorker" in navigator
+        ? await navigator.serviceWorker.getRegistration()
+        : null;
+    } catch {
+      registration = null;
     }
+
+    if (registration?.waiting) {
+      try {
+        registration.waiting.postMessage({ type: "SKIP_WAITING" });
+        return;
+      } catch {
+        // If update activation is blocked, fall through to a normal reload.
+      }
+    }
+
     window.location.reload();
   };
 
