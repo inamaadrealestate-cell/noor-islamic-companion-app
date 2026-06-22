@@ -71,6 +71,22 @@ export const DEFAULT_PRAYER_LOCATION: PrayerLocation = {
 export const ADHAN_AUDIO_URL = 'https://www.islamcan.com/audio/adhan/azan1.mp3';
 export const PRAYER_LOCATION_STORAGE_KEY = 'noor_prayer_location';
 
+function safeLocalGet(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function safeLocalSet(key: string, value: string): void {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    // localStorage can fail in private browsing or restricted embedded browsers.
+  }
+}
+
 export const FALLBACK_PRAYER_DATA: PrayerTimesData = {
   timings: {
     Fajr: '05:12',
@@ -127,7 +143,7 @@ function cleanPrayerTimesData(data: PrayerTimesData): PrayerTimesData {
 
 export function readSavedPrayerLocation(): PrayerLocation | null {
   try {
-    const saved = localStorage.getItem(PRAYER_LOCATION_STORAGE_KEY);
+    const saved = safeLocalGet(PRAYER_LOCATION_STORAGE_KEY);
     if (!saved) return null;
 
     const parsed = JSON.parse(saved) as PrayerLocation;
@@ -143,7 +159,7 @@ export function readSavedPrayerLocation(): PrayerLocation | null {
 
 export function savePrayerLocation(location: PrayerLocation): void {
   try {
-    localStorage.setItem(PRAYER_LOCATION_STORAGE_KEY, JSON.stringify(location));
+    safeLocalSet(PRAYER_LOCATION_STORAGE_KEY, JSON.stringify(location));
   } catch {
     // localStorage can fail in private browsing or restricted embedded browsers.
   }
@@ -151,7 +167,7 @@ export function savePrayerLocation(location: PrayerLocation): void {
 
 export function getBrowserPrayerLocation(): Promise<{ lat: number; lng: number }> {
   return new Promise((resolve, reject) => {
-    if (!navigator.geolocation) {
+    if (typeof navigator === 'undefined' || !navigator.geolocation) {
       reject(new Error('Geolocation is not supported by this browser.'));
       return;
     }

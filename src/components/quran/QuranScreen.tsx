@@ -91,13 +91,51 @@ interface PersonalAyahNote {
 
 const NOTES_STORAGE_KEY = "noor_personal_ayah_notes";
 
+function safeLocalGet(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function safeLocalSet(key: string, value: string): void {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    // Storage may be blocked/full on Safari, Samsung private mode, or embedded browsers.
+  }
+}
+
+function safeLocalRemove(key: string): void {
+  try {
+    localStorage.removeItem(key);
+  } catch {}
+}
+
+function safeLocalLength(): number {
+  try {
+    return localStorage.length;
+  } catch {
+    return 0;
+  }
+}
+
+function safeLocalKey(index: number): string | null {
+  try {
+    return localStorage.key(index);
+  } catch {
+    return null;
+  }
+}
+
 function getAyahNoteId(surah: number, ayah: number) {
   return `${surah}:${ayah}`;
 }
 
 function loadPersonalNotes(): PersonalAyahNote[] {
   try {
-    const raw = localStorage.getItem(NOTES_STORAGE_KEY);
+    const raw = safeLocalGet(NOTES_STORAGE_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? parsed : [];
@@ -107,11 +145,7 @@ function loadPersonalNotes(): PersonalAyahNote[] {
 }
 
 function savePersonalNotes(notes: PersonalAyahNote[]) {
-  try {
-    localStorage.setItem(NOTES_STORAGE_KEY, JSON.stringify(notes));
-  } catch {
-    // Storage may be full or blocked. Keep the app running without crashing.
-  }
+  safeLocalSet(NOTES_STORAGE_KEY, JSON.stringify(notes));
 }
 
 const QURAN_SURAH_CACHE_PREFIX = "noor_quran_surah_cache_v1";
@@ -159,7 +193,7 @@ function loadCachedSurah(
   edition: string,
 ): CachedSurahPayload | null {
   try {
-    const raw = localStorage.getItem(getQuranCacheKey(surah, edition));
+    const raw = safeLocalGet(getQuranCacheKey(surah, edition));
     if (!raw) return null;
     const parsed = JSON.parse(raw) as CachedSurahPayload;
     if (parsed.version !== QURAN_SURAH_CACHE_VERSION) return null;
@@ -184,7 +218,7 @@ function saveCachedSurah(
       cachedAt: new Date().toISOString(),
       ayahs: ayahsToCache,
     };
-    localStorage.setItem(
+    safeLocalSet(
       getQuranCacheKey(surah, edition),
       JSON.stringify(payload),
     );
@@ -195,7 +229,7 @@ function saveCachedSurah(
 
 function removeCachedSurah(surah: number, edition: string) {
   try {
-    localStorage.removeItem(getQuranCacheKey(surah, edition));
+    safeLocalRemove(getQuranCacheKey(surah, edition));
   } catch {}
 }
 
@@ -203,10 +237,10 @@ function getCachedSurahSummaries(edition: string): CachedSurahSummary[] {
   try {
     const summaries: CachedSurahSummary[] = [];
     const prefix = `${QURAN_SURAH_CACHE_PREFIX}_${edition}_`;
-    for (let i = 0; i < localStorage.length; i += 1) {
-      const key = localStorage.key(i);
+    for (let i = 0; i < safeLocalLength(); i += 1) {
+      const key = safeLocalKey(i);
       if (!key || !key.startsWith(prefix)) continue;
-      const raw = localStorage.getItem(key);
+      const raw = safeLocalGet(key);
       if (!raw) continue;
       const parsed = JSON.parse(raw) as CachedSurahPayload;
       if (parsed.version !== QURAN_SURAH_CACHE_VERSION) continue;
@@ -740,7 +774,7 @@ export default function QuranScreen({
     if (viewTab !== "reading" || !selectedAyah) return;
     const scrollTimer = window.setTimeout(() => {
       selectedAyahRef.current?.scrollIntoView({
-        behavior: "smooth",
+        behavior: "auto",
         block: "center",
       });
     }, 150);

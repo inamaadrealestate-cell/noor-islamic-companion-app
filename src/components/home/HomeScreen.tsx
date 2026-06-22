@@ -144,20 +144,28 @@ function getTodayKey(): string {
   return new Date().toISOString().split('T')[0];
 }
 
-function readStoredNumber(key: string, fallback: number): number {
+function safeLocalGet(key: string): string | null {
   try {
-    const value = Number(localStorage.getItem(key));
-    return Number.isFinite(value) && value >= 0 ? value : fallback;
+    return localStorage.getItem(key);
   } catch {
-    return fallback;
+    return null;
   }
 }
 
-function writeStoredNumber(key: string, value: number): void {
+function safeLocalSet(key: string, value: string): void {
   try {
-    localStorage.setItem(key, String(value));
+    localStorage.setItem(key, value);
   } catch {
-    // Some private/restricted browsers can block localStorage writes.
+    // Storage may be blocked/full on Safari, Samsung private mode, or embedded browsers.
+  }
+}
+
+function readStoredNumber(key: string, fallback: number): number {
+  try {
+    const value = Number(safeLocalGet(key));
+    return Number.isFinite(value) && value >= 0 ? value : fallback;
+  } catch {
+    return fallback;
   }
 }
 
@@ -169,7 +177,7 @@ function loadTodayStartPage(currentPage: number): number {
   const key = `${READING_START_PREFIX}${getTodayKey()}`;
   const stored = readStoredNumber(key, currentPage);
   if (stored < 1) {
-    writeStoredNumber(key, currentPage);
+    safeLocalSet(key, String(currentPage));
     return currentPage;
   }
   return stored;
@@ -216,12 +224,12 @@ export default function HomeScreen({ setActiveTab, onContinueReading, isLightMod
 
   const updateReadingGoal = (goal: number) => {
     setReadingGoal(goal);
-    writeStoredNumber(READING_GOAL_KEY, goal);
+    safeLocalSet(READING_GOAL_KEY, String(goal));
   };
 
   const resetTodayReadingStart = () => {
     const currentPage = Math.max(1, progress.page_number || 1);
-    writeStoredNumber(`${READING_START_PREFIX}${getTodayKey()}`, currentPage);
+    safeLocalSet(`${READING_START_PREFIX}${getTodayKey()}`, String(currentPage));
     setTodayStartPage(currentPage);
   };
 
