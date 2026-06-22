@@ -44,6 +44,22 @@ interface TasbihHistoryItem {
 const TASBIH_STATE_KEY = "noor_tasbih_state";
 const TASBIH_HISTORY_KEY = "noor_tasbih_history";
 
+function safeLocalGet(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function safeLocalSet(key: string, value: string): void {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    // Some Safari/private browsers block storage. Keep Tasbih usable in memory.
+  }
+}
+
 const TASBIH_PRESETS: TasbihPreset[] = [
   {
     id: "subhanallah",
@@ -121,7 +137,7 @@ const TASBIH_PRESETS: TasbihPreset[] = [
 
 function safeReadState(): TasbihState {
   try {
-    const saved = localStorage.getItem(TASBIH_STATE_KEY);
+    const saved = safeLocalGet(TASBIH_STATE_KEY);
     if (!saved) throw new Error("No saved tasbih state");
     const parsed = JSON.parse(saved) as Partial<TasbihState>;
     return {
@@ -142,7 +158,7 @@ function safeReadState(): TasbihState {
 
 function safeReadHistory(): TasbihHistoryItem[] {
   try {
-    const saved = localStorage.getItem(TASBIH_HISTORY_KEY);
+    const saved = safeLocalGet(TASBIH_HISTORY_KEY);
     if (!saved) return [];
     const parsed = JSON.parse(saved) as TasbihHistoryItem[];
     return Array.isArray(parsed) ? parsed : [];
@@ -183,11 +199,11 @@ export default function TasbihScreen({ isLightMode }: TasbihScreenProps) {
   const todayTotal = todayCompleted.reduce((sum, item) => sum + item.count, 0) + state.count;
 
   useEffect(() => {
-    localStorage.setItem(TASBIH_STATE_KEY, JSON.stringify(state));
+    safeLocalSet(TASBIH_STATE_KEY, JSON.stringify(state));
   }, [state]);
 
   useEffect(() => {
-    localStorage.setItem(TASBIH_HISTORY_KEY, JSON.stringify(history.slice(0, 80)));
+    safeLocalSet(TASBIH_HISTORY_KEY, JSON.stringify(history.slice(0, 80)));
   }, [history]);
 
   const increment = () => {

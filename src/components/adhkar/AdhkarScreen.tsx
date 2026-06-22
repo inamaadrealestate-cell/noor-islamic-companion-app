@@ -60,11 +60,27 @@ function getDateKey(daysAgo: number): string {
   return date.toISOString().split('T')[0];
 }
 
-function hasAdhkarProgress(dateKey: string): boolean {
-  const raw = localStorage.getItem(`noor_adhkar_${dateKey}`);
-  if (!raw) return false;
-
+function safeLocalGet(key: string): string | null {
   try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function safeLocalSet(key: string, value: string): void {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    // Private Safari, embedded browsers, or full storage must not break Adhkar.
+  }
+}
+
+function hasAdhkarProgress(dateKey: string): boolean {
+  try {
+    const raw = safeLocalGet(`noor_adhkar_${dateKey}`);
+    if (!raw) return false;
+
     const parsed = JSON.parse(raw) as Record<string, number>;
     return Object.values(parsed).some((value) => Number(value) > 0);
   } catch {
@@ -115,7 +131,7 @@ export default function AdhkarScreen({ isLightMode }: AdhkarScreenProps) {
     setCounts(Storage.getAdhkarProgress(todayKey));
     const savedReminderSettings = getAdhkarReminderSettings();
     setReminderSettings(savedReminderSettings);
-    setNotificationsEnabled(savedReminderSettings.enabled || localStorage.getItem('noor_adhkar_notif') === 'true');
+    setNotificationsEnabled(savedReminderSettings.enabled || safeLocalGet('noor_adhkar_notif') === 'true');
     setStreak(calculateLocalStreak());
 
     const handleReminderChange = () => {
@@ -238,7 +254,7 @@ export default function AdhkarScreen({ isLightMode }: AdhkarScreenProps) {
     setReminderSettings(updatedSettings);
     saveAdhkarReminderSettings(updatedSettings);
     setNotificationsEnabled(next);
-    localStorage.setItem('noor_adhkar_notif', String(next));
+    safeLocalSet('noor_adhkar_notif', String(next));
     showToast(next ? 'Adhkar reminders enabled' : 'Adhkar reminders turned off');
   };
 

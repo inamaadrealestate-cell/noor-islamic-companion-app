@@ -51,9 +51,25 @@ interface DownloadToastState {
 
 const FAVORITE_RECITERS_KEY = "noor_favorite_reciters";
 
+function safeLocalGet(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function safeLocalSet(key: string, value: string): void {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    // Storage may be blocked or full on Safari/private browsers.
+  }
+}
+
 function loadFavoriteReciters(): string[] {
   try {
-    const raw = localStorage.getItem(FAVORITE_RECITERS_KEY);
+    const raw = safeLocalGet(FAVORITE_RECITERS_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed)
@@ -66,7 +82,7 @@ function loadFavoriteReciters(): string[] {
 
 function saveFavoriteReciters(ids: string[]): void {
   try {
-    localStorage.setItem(FAVORITE_RECITERS_KEY, JSON.stringify(ids));
+    safeLocalSet(FAVORITE_RECITERS_KEY, JSON.stringify(ids));
   } catch {}
 }
 
@@ -297,7 +313,7 @@ export default function AudioPlayer({
     let cancelled = false;
     setEffectiveAudioUrl(audioUrl);
     setCacheStatus("");
-    setDownloaded(localStorage.getItem(downloadKey) === "cached");
+    setDownloaded(safeLocalGet(downloadKey) === "cached");
 
     if (objectUrlRef.current) {
       URL.revokeObjectURL(objectUrlRef.current);
@@ -313,7 +329,7 @@ export default function AudioPlayer({
         if (!cachedResponse || cancelled) return;
 
         setDownloaded(true);
-        localStorage.setItem(downloadKey, "cached");
+        safeLocalSet(downloadKey, "cached");
 
         const blob = await cachedResponse.blob();
         if (blob.size > 0 && !cancelled) {
@@ -593,7 +609,7 @@ export default function AudioPlayer({
 
       const cache = await caches.open(AUDIO_CACHE_NAME);
       await cache.put(baseAudioUrl, response.clone());
-      localStorage.setItem(downloadKey, "cached");
+      safeLocalSet(downloadKey, "cached");
       setDownloaded(true);
 
       const blob = await response.blob();
