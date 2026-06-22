@@ -58,7 +58,7 @@ html {
   overflow-x: hidden;
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
-  scroll-behavior: smooth;
+  scroll-behavior: auto;
 }
 
 body,
@@ -499,4 +499,82 @@ select,
 textarea {
   -webkit-user-select: text;
   user-select: text;
+}
+
+
+/* Samsung Internet scrolling crash protection
+   Some Samsung phones can freeze/crash when scrolling a PWA page that has
+   fixed blurred controls, smooth scrolling, and continuous transform animations.
+   This keeps the visual design but switches Samsung to a lighter scroll mode. */
+body.noor-samsung-scroll-safe {
+  height: 100% !important;
+  min-height: 100% !important;
+  overflow: hidden !important;
+  overscroll-behavior: none !important;
+}
+
+body.noor-samsung-scroll-safe #root {
+  height: 100% !important;
+  min-height: 100% !important;
+  overflow: hidden !important;
+}
+
+body.noor-samsung-scroll-safe .noor-scroll-root {
+  height: 100vh !important;
+  min-height: 0 !important;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  overscroll-behavior-y: contain !important;
+  -webkit-overflow-scrolling: touch;
+  transform: translate3d(0, 0, 0);
+  backface-visibility: hidden;
+}
+
+@supports (height: 100svh) {
+  body.noor-samsung-scroll-safe .noor-scroll-root {
+    height: 100svh !important;
+  }
+}
+
+body.noor-samsung-scroll-safe .noor-page-scroll {
+  min-height: auto !important;
+  overflow-x: hidden !important;
+  overflow-y: visible !important;
+  padding-bottom: calc(var(--noor-nav-height, 4.5rem) + env(safe-area-inset-bottom) + 2.2rem) !important;
+}
+
+body.noor-samsung-scroll-safe .backdrop-blur-sm,
+body.noor-samsung-scroll-safe .backdrop-blur-md,
+body.noor-samsung-scroll-safe .backdrop-blur-lg,
+body.noor-samsung-scroll-safe .backdrop-blur-xl {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+body.noor-samsung-scroll-safe .noor-install-glow,
+body.noor-samsung-scroll-safe .blur-sm,
+body.noor-samsung-scroll-safe .blur-md,
+body.noor-samsung-scroll-safe .blur-lg {
+  filter: none !important;
+}
+
+body.noor-samsung-scroll-safe .noor-floating-install {
+  transform: translate3d(0, 0, 0);
+  will-change: auto;
+}
+
+body.noor-samsung-scroll-safe.noor-user-scrolling .animate-bounce,
+body.noor-user-scrolling .noor-floating-install .animate-bounce {
+  animation: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
 }

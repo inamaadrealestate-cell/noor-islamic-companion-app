@@ -112,6 +112,19 @@ function isLikelyIos(): boolean {
   return /iphone|ipad|ipod/i.test(userAgent) || (platform === "MacIntel" && maxTouchPoints > 1);
 }
 
+function isSamsungLikeBrowser(): boolean {
+  if (typeof navigator === "undefined") return false;
+
+  const userAgent = navigator.userAgent || "";
+  const platform = navigator.platform || "";
+
+  return (
+    /SamsungBrowser|SAMSUNG|Samsung/i.test(userAgent) ||
+    /SM-[A-Z0-9]+/i.test(userAgent) ||
+    /Samsung/i.test(platform)
+  );
+}
+
 declare global {
   interface Window {
     noorDeferredInstallPrompt?: BeforeInstallPromptEvent;
@@ -222,15 +235,21 @@ export default function App() {
   const isLightMode = settings.theme === "light";
 
   useEffect(() => {
-    document.body.className = isLightMode
+    const baseThemeClass = isLightMode
       ? "bg-slate-50 text-slate-800"
       : "bg-slate-900 text-white";
 
+    document.body.className = baseThemeClass;
+
+    if (isSamsungLikeBrowser()) {
+      document.body.classList.add("noor-samsung-scroll-safe");
+    }
+
     document.documentElement.style.colorScheme = isLightMode ? "light" : "dark";
 
-    // Some Android WebViews/PWA browsers can lock scrolling when the root
-    // element uses dynamic viewport sizing with fixed controls. Keep the real
-    // document scrollable on every phone while still preventing sideways drift.
+    // Keep document scrolling stable on normal browsers. Samsung Internet gets
+    // an extra CSS-only root scroll container below because body scrolling with
+    // fixed blurred controls can crash or freeze on some devices.
     document.documentElement.style.height = "auto";
     document.documentElement.style.minHeight = "100%";
     document.documentElement.style.overflowX = "hidden";
@@ -246,6 +265,35 @@ export default function App() {
     document.body.style.touchAction = "pan-y pinch-zoom";
     (document.body.style as CSSStyleDeclaration & { webkitOverflowScrolling?: string }).webkitOverflowScrolling = "touch";
   }, [isLightMode]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+
+    let scrollTimer: number | undefined;
+
+    const markScrolling = () => {
+      document.body.classList.add("noor-user-scrolling");
+      if (scrollTimer) window.clearTimeout(scrollTimer);
+      scrollTimer = window.setTimeout(() => {
+        document.body.classList.remove("noor-user-scrolling");
+        scrollTimer = undefined;
+      }, 180);
+    };
+
+    const scrollRoot = document.querySelector(".noor-scroll-root");
+
+    window.addEventListener("scroll", markScrolling, { passive: true });
+    scrollRoot?.addEventListener("scroll", markScrolling, { passive: true });
+    document.addEventListener("touchmove", markScrolling, { passive: true });
+
+    return () => {
+      window.removeEventListener("scroll", markScrolling);
+      scrollRoot?.removeEventListener("scroll", markScrolling);
+      document.removeEventListener("touchmove", markScrolling);
+      if (scrollTimer) window.clearTimeout(scrollTimer);
+      document.body.classList.remove("noor-user-scrolling");
+    };
+  }, []);
 
   useEffect(() => {
     safeLocalSet(LAST_TAB_KEY, activeTab);
@@ -340,11 +388,9 @@ export default function App() {
   const setActiveTab = (tab: string) => {
     if (isValidTab(tab)) {
       setActiveTabState(tab);
-      try {
-        window.scrollTo({ top: 0, behavior: "smooth" });
-      } catch {
-        window.scrollTo(0, 0);
-      }
+      // Instant scroll avoids Samsung Internet crashes linked to smooth scrolling
+      // while fixed PWA controls are mounted.
+      window.scrollTo(0, 0);
     }
   };
 
@@ -489,13 +535,13 @@ export default function App() {
               disabled={isInstallPromptRunning}
               aria-label="Install NoorQuran app"
               title="Install NoorQuran app"
-              className={`pointer-events-auto group relative flex h-11 w-11 items-center justify-center overflow-visible rounded-2xl border shadow-2xl active:scale-95 disabled:opacity-70 ${
+              className={`pointer-events-auto noor-floating-install group relative flex h-11 w-11 items-center justify-center overflow-visible rounded-2xl border shadow-2xl active:scale-95 disabled:opacity-70 ${
                 isLightMode
                   ? "border-emerald-200 bg-white text-emerald-700 shadow-emerald-900/15"
                   : "border-emerald-500/40 bg-slate-900 text-emerald-300 shadow-emerald-950/40"
               }`}
             >
-              <span className="absolute -inset-1 rounded-[1.15rem] bg-emerald-400/25 blur-md transition-opacity group-hover:opacity-100" />
+              <span className="noor-install-glow absolute -inset-1 rounded-[1.15rem] bg-emerald-400/25 blur-md transition-opacity group-hover:opacity-100" />
               <span className={`relative flex h-full w-full items-center justify-center rounded-2xl bg-emerald-600 text-white ${isInstallPromptRunning ? "" : "animate-bounce"}`}>
                 <Download className="h-5 w-5" strokeWidth={2.7} />
               </span>
