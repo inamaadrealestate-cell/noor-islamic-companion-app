@@ -71,6 +71,13 @@ async function matchSafe(request) {
   }
 }
 
+function offlineFallbackResponse() {
+  return new Response(
+    '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>NoorQuran Offline</title></head><body style="font-family:system-ui;padding:24px;line-height:1.6"><h1>NoorQuran</h1><p>You are offline. Open NoorQuran again after the page cache is ready, or reconnect once to refresh the app.</p></body></html>',
+    { headers: { "Content-Type": "text/html; charset=utf-8" } },
+  );
+}
+
 async function networkFirst(request, cacheName) {
   const cached = await matchSafe(request);
 
@@ -92,7 +99,7 @@ async function staleWhileRevalidate(request, cacheName) {
       return response;
     })
     .catch(function () {
-      return cached;
+      return cached || Response.error();
     });
 
   return cached || fetchPromise;
@@ -157,7 +164,10 @@ self.addEventListener("fetch", function (event) {
         })
         .catch(function () {
           return matchSafe("/index.html").then(function (response) {
-            return response || matchSafe("/");
+            if (response) return response;
+            return matchSafe("/").then(function (rootResponse) {
+              return rootResponse || offlineFallbackResponse();
+            });
           });
         }),
     );

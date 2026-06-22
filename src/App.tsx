@@ -128,7 +128,7 @@ function isSamsungLikeBrowser(): boolean {
 declare global {
   interface Window {
     noorDeferredInstallPrompt?: BeforeInstallPromptEvent;
-    noorPromptInstall?: () => Promise<void>;
+    noorPromptInstall?: () => Promise<boolean>;
     noorApplyUpdate?: () => Promise<void>;
   }
 }
@@ -269,6 +269,11 @@ export default function App() {
   useEffect(() => {
     if (typeof window === "undefined") return undefined;
 
+    // Samsung Internet can crash when a page does DOM class changes on every
+    // touchmove/scroll while fixed controls are visible. Avoid scroll listeners
+    // completely on Samsung and let the CSS reduce animations there.
+    if (isSamsungLikeBrowser()) return undefined;
+
     let scrollTimer: number | undefined;
 
     const markScrolling = () => {
@@ -280,16 +285,10 @@ export default function App() {
       }, 180);
     };
 
-    const scrollRoot = document.querySelector(".noor-scroll-root");
-
     window.addEventListener("scroll", markScrolling, { passive: true });
-    scrollRoot?.addEventListener("scroll", markScrolling, { passive: true });
-    document.addEventListener("touchmove", markScrolling, { passive: true });
 
     return () => {
       window.removeEventListener("scroll", markScrolling);
-      scrollRoot?.removeEventListener("scroll", markScrolling);
-      document.removeEventListener("touchmove", markScrolling);
       if (scrollTimer) window.clearTimeout(scrollTimer);
       document.body.classList.remove("noor-user-scrolling");
     };
@@ -437,6 +436,11 @@ export default function App() {
 
     if (installEvent) {
       setIsInstallPromptRunning(true);
+      const fallbackTimer = window.setTimeout(() => {
+        setIsInstallPromptRunning(false);
+        setInstallHint("");
+      }, 9000);
+
       try {
         setShowInstallGuide(false);
         setInstallHint("Opening install...");
@@ -461,6 +465,33 @@ export default function App() {
         window.noorDeferredInstallPrompt = undefined;
         setDeferredInstallPrompt(null);
       } finally {
+        window.clearTimeout(fallbackTimer);
+        setIsInstallPromptRunning(false);
+      }
+    }
+
+    if (typeof window.noorPromptInstall === "function") {
+      setIsInstallPromptRunning(true);
+      const fallbackTimer = window.setTimeout(() => {
+        setIsInstallPromptRunning(false);
+        setInstallHint("");
+      }, 9000);
+
+      try {
+        setShowInstallGuide(false);
+        setInstallHint("Opening install...");
+        const opened = await window.noorPromptInstall();
+
+        if (opened || isRunningAsInstalledApp()) {
+          setShowInstallButton(false);
+          setShowInstallGuide(false);
+          setInstallHint("");
+          return;
+        }
+      } catch {
+        // Fall through to same-page install instructions.
+      } finally {
+        window.clearTimeout(fallbackTimer);
         setIsInstallPromptRunning(false);
       }
     }

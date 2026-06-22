@@ -82,7 +82,7 @@ let reminderTickInProgress = false;
 declare global {
   interface Window {
     noorDeferredInstallPrompt?: BeforeInstallPromptEvent;
-    noorPromptInstall?: () => Promise<void>;
+    noorPromptInstall?: () => Promise<boolean>;
     noorApplyUpdate?: () => Promise<void>;
   }
 }
@@ -266,9 +266,24 @@ async function requestNotificationPermissionCompat(): Promise<NoorNotificationSt
     ) => Promise<NotificationPermission> | void;
 
     const permission = await new Promise<NotificationPermission>((resolve) => {
-      const maybePromise = requestPermission((callbackPermission) => resolve(callbackPermission));
+      let settled = false;
+      const finish = (nextPermission: NotificationPermission) => {
+        if (settled) return;
+        settled = true;
+        resolve(nextPermission);
+      };
+
+      const timeoutId = window.setTimeout(() => finish(Notification.permission), 7000);
+      const finishAndClear = (nextPermission: NotificationPermission) => {
+        window.clearTimeout(timeoutId);
+        finish(nextPermission);
+      };
+
+      const maybePromise = requestPermission((callbackPermission) => finishAndClear(callbackPermission));
       if (maybePromise && typeof (maybePromise as Promise<NotificationPermission>).then === "function") {
-        (maybePromise as Promise<NotificationPermission>).then(resolve).catch(() => resolve(Notification.permission));
+        (maybePromise as Promise<NotificationPermission>)
+          .then(finishAndClear)
+          .catch(() => finishAndClear(Notification.permission));
       }
     });
 
@@ -605,11 +620,17 @@ function setupInstallPrompt(): void {
 
   window.noorPromptInstall = async () => {
     const event = window.noorDeferredInstallPrompt;
-    if (!event) return;
+    if (!event) return false;
 
-    window.noorDeferredInstallPrompt = undefined;
-    await event.prompt();
-    await event.userChoice.catch(() => undefined);
+    try {
+      await event.prompt();
+      const choice = await event.userChoice.catch(() => null);
+      window.noorDeferredInstallPrompt = undefined;
+      return choice?.outcome === "accepted" || isStandaloneMode();
+    } catch {
+      window.noorDeferredInstallPrompt = undefined;
+      return false;
+    }
   };
 
   window.addEventListener("appinstalled", () => {
@@ -620,7 +641,7 @@ function setupInstallPrompt(): void {
 if (hasWindow()) {
   window.noorApplyUpdate = async () => {
     const registration = hasNavigator()
-      ? await navigator.serviceWorker.getRegistration(SERVICE_WORKER_PATH)
+      ? await navigator.serviceWorker.getRegistration()
       : null;
     if (registration?.waiting) {
       registration.waiting.postMessage({ type: "SKIP_WAITING" });
@@ -629,10 +650,16 @@ if (hasWindow()) {
     window.location.reload();
   };
 
-  window.addEventListener("load", () => {
+  const startNoorPwaRuntime = () => {
     registerNoorServiceWorker().catch(() => undefined);
     startNoorReminderScheduler();
-  });
+  };
+
+  if (document.readyState === "complete" || document.readyState === "interactive") {
+    window.setTimeout(startNoorPwaRuntime, 0);
+  } else {
+    window.addEventListener("load", startNoorPwaRuntime, { once: true });
+  }
 
   window.addEventListener("storage", (event) => {
     if (event.key === REMINDER_STORAGE_KEY || event.key === "noor_settings" || event.key === PRAYER_LOCATION_STORAGE_KEY) {

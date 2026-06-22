@@ -502,51 +502,56 @@ textarea {
 }
 
 
-/* Samsung Internet scrolling crash protection
-   Some Samsung phones can freeze/crash when scrolling a PWA page that has
-   fixed blurred controls, smooth scrolling, and continuous transform animations.
-   This keeps the visual design but switches Samsung to a lighter scroll mode. */
-body.noor-samsung-scroll-safe {
-  height: 100% !important;
-  min-height: 100% !important;
-  overflow: hidden !important;
-  overscroll-behavior: none !important;
-}
 
-body.noor-samsung-scroll-safe #root {
-  height: 100% !important;
-  min-height: 100% !important;
-  overflow: hidden !important;
-}
 
-body.noor-samsung-scroll-safe .noor-scroll-root {
-  height: 100vh !important;
-  min-height: 0 !important;
+/* Samsung Internet emergency stability layer
+   This is stricter than the normal scroll fix. It avoids the main Samsung crash
+   triggers: nested fixed scroll containers, touchmove DOM updates, smooth scroll,
+   bouncing animations, backdrop filters, blur filters, and heavy transform layers. */
+body.noor-samsung-scroll-safe,
+body.noor-samsung-scroll-safe #root,
+body.noor-samsung-scroll-safe .noor-scroll-root,
+body.noor-samsung-scroll-safe .noor-page-scroll {
+  height: auto !important;
+  min-height: 100% !important;
   overflow-x: hidden !important;
   overflow-y: auto !important;
-  overscroll-behavior-y: contain !important;
-  -webkit-overflow-scrolling: touch;
-  transform: translate3d(0, 0, 0);
-  backface-visibility: hidden;
+  -webkit-overflow-scrolling: touch !important;
+  overscroll-behavior-y: auto !important;
+  transform: none !important;
+  backface-visibility: visible !important;
+  contain: none !important;
 }
 
-@supports (height: 100svh) {
-  body.noor-samsung-scroll-safe .noor-scroll-root {
-    height: 100svh !important;
-  }
+body.noor-samsung-scroll-safe {
+  position: relative !important;
+  touch-action: pan-y pinch-zoom !important;
 }
 
+body.noor-samsung-scroll-safe .noor-scroll-root,
 body.noor-samsung-scroll-safe .noor-page-scroll {
-  min-height: auto !important;
-  overflow-x: hidden !important;
-  overflow-y: visible !important;
-  padding-bottom: calc(var(--noor-nav-height, 4.5rem) + env(safe-area-inset-bottom) + 2.2rem) !important;
+  display: block !important;
+  padding-bottom: calc(var(--noor-nav-height, 4.5rem) + env(safe-area-inset-bottom) + 2.5rem) !important;
+}
+
+body.noor-samsung-scroll-safe *,
+body.noor-samsung-scroll-safe *::before,
+body.noor-samsung-scroll-safe *::after {
+  scroll-behavior: auto !important;
+}
+
+body.noor-samsung-scroll-safe .animate-bounce,
+body.noor-samsung-scroll-safe .animate-pulse,
+body.noor-samsung-scroll-safe.noor-user-scrolling .animate-bounce,
+body.noor-user-scrolling .noor-floating-install .animate-bounce {
+  animation: none !important;
 }
 
 body.noor-samsung-scroll-safe .backdrop-blur-sm,
 body.noor-samsung-scroll-safe .backdrop-blur-md,
 body.noor-samsung-scroll-safe .backdrop-blur-lg,
-body.noor-samsung-scroll-safe .backdrop-blur-xl {
+body.noor-samsung-scroll-safe .backdrop-blur-xl,
+body.noor-samsung-scroll-safe [class*="backdrop-blur"] {
   -webkit-backdrop-filter: none !important;
   backdrop-filter: none !important;
 }
@@ -554,17 +559,18 @@ body.noor-samsung-scroll-safe .backdrop-blur-xl {
 body.noor-samsung-scroll-safe .noor-install-glow,
 body.noor-samsung-scroll-safe .blur-sm,
 body.noor-samsung-scroll-safe .blur-md,
-body.noor-samsung-scroll-safe .blur-lg {
+body.noor-samsung-scroll-safe .blur-lg,
+body.noor-samsung-scroll-safe [class*="blur-"] {
   filter: none !important;
 }
 
-body.noor-samsung-scroll-safe .noor-floating-install {
-  transform: translate3d(0, 0, 0);
-  will-change: auto;
+body.noor-samsung-scroll-safe .noor-floating-install,
+body.noor-samsung-scroll-safe .noor-floating-install * {
+  transform: none !important;
+  will-change: auto !important;
 }
 
-body.noor-samsung-scroll-safe.noor-user-scrolling .animate-bounce,
-body.noor-user-scrolling .noor-floating-install .animate-bounce {
+body.noor-samsung-scroll-safe .noor-floating-install span {
   animation: none !important;
 }
 
@@ -577,4 +583,50 @@ body.noor-user-scrolling .noor-floating-install .animate-bounce {
     scroll-behavior: auto !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* Final Samsung stability override
+   Uses the page/body as the only vertical scroller. This avoids Samsung Internet
+   crashes caused by nested scroll containers plus fixed controls. */
+body.noor-samsung-scroll-safe {
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  height: auto !important;
+  min-height: 100% !important;
+  position: relative !important;
+  touch-action: pan-y pinch-zoom !important;
+  overscroll-behavior-y: auto !important;
+}
+
+body.noor-samsung-scroll-safe #root,
+body.noor-samsung-scroll-safe .noor-scroll-root,
+body.noor-samsung-scroll-safe .noor-page-scroll {
+  height: auto !important;
+  min-height: auto !important;
+  overflow-x: hidden !important;
+  overflow-y: visible !important;
+  -webkit-overflow-scrolling: auto !important;
+  overscroll-behavior-y: auto !important;
+  contain: none !important;
+}
+
+body.noor-samsung-scroll-safe .noor-scroll-root {
+  min-height: 100vh !important;
+  padding-bottom: env(safe-area-inset-bottom) !important;
+}
+
+body.noor-samsung-scroll-safe .noor-page-scroll {
+  padding-bottom: calc(var(--noor-nav-height, 4.5rem) + env(safe-area-inset-bottom) + 2.75rem) !important;
+}
+
+body.noor-samsung-scroll-safe .noor-floating-install,
+body.noor-samsung-scroll-safe .noor-floating-install * {
+  animation: none !important;
+  filter: none !important;
+  -webkit-filter: none !important;
+  will-change: auto !important;
+}
+
+body.noor-samsung-scroll-safe .noor-install-glow {
+  display: none !important;
 }
