@@ -373,3 +373,63 @@ textarea {
   }
 }
 
+
+/* NoorQuran all-phone scroll reliability fix
+   Keeps the app vertically scrollable on Android Chrome, Samsung Internet,
+   old WebViews, and installed PWA mode without changing the design. */
+html,
+body,
+#root {
+  height: auto !important;
+  min-height: 100% !important;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+}
+
+body {
+  position: relative;
+  overscroll-behavior-y: auto !important;
+  touch-action: pan-y pinch-zoom !important;
+  -webkit-overflow-scrolling: touch;
+}
+
+#root {
+  isolation: isolate;
+}
+
+.noor-scroll-root {
+  min-height: 100vh;
+  min-height: 100svh;
+  overflow-x: hidden;
+  overflow-y: visible;
+}
+
+@supports (min-height: 100dvh) {
+  .noor-scroll-root {
+    min-height: 100dvh;
+  }
+}
+
+.noor-page-scroll {
+  min-height: 100vh;
+  min-height: 100svh;
+  overflow-x: hidden;
+  overflow-y: visible;
+  -webkit-overflow-scrolling: touch;
+}
+
+@media (max-width: 480px) {
+  html,
+  body,
+  #root {
+    overflow-y: auto !important;
+  }
+
+  .noor-page-scroll {
+    padding-bottom: calc(var(--noor-nav-height, 4.5rem) + env(safe-area-inset-bottom) + 2rem) !important;
+  }
+
+  .noor-scroll-root {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}

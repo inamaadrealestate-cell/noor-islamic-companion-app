@@ -11,6 +11,11 @@ import SettingsScreen from "./components/settings/SettingsScreen";
 import TasbihScreen from "./components/tasbih/TasbihScreen";
 import { Storage, UserSettings } from "./lib/storage";
 
+type BeforeInstallPromptEvent = Event & {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
+};
+
 type AppTab = "home" | "quran" | "prayer" | "adhkar" | "tasbih" | "qibla" | "settings";
 
 const VALID_TABS: AppTab[] = ["home", "quran", "prayer", "adhkar", "tasbih", "qibla", "settings"];
@@ -41,6 +46,19 @@ function isRunningAsInstalledApp(): boolean {
   );
 
   return standaloneDisplay || fullscreenDisplay || iosStandalone;
+}
+
+function isLikelyIos(): boolean {
+  if (typeof navigator === "undefined") return false;
+  return /iphone|ipad|ipod/i.test(navigator.userAgent);
+}
+
+declare global {
+  interface Window {
+    noorDeferredInstallPrompt?: BeforeInstallPromptEvent;
+    noorPromptInstall?: () => Promise<void>;
+    noorApplyUpdate?: () => Promise<void>;
+  }
 }
 
 interface AppErrorBoundaryProps {
@@ -132,6 +150,9 @@ export default function App() {
   const [updateAvailable, setUpdateAvailable] = useState<boolean>(false);
   const [showInstallButton, setShowInstallButton] = useState<boolean>(false);
   const [installHint, setInstallHint] = useState<string>("");
+  const [showInstallGuide, setShowInstallGuide] = useState<boolean>(false);
+  const [deferredInstallPrompt, setDeferredInstallPrompt] =
+    useState<BeforeInstallPromptEvent | null>(null);
 
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [currentSurah, setCurrentSurah] = useState<number>(1);
@@ -144,7 +165,22 @@ export default function App() {
     document.body.className = isLightMode
       ? "bg-slate-50 text-slate-800"
       : "bg-slate-900 text-white";
+
     document.documentElement.style.colorScheme = isLightMode ? "light" : "dark";
+
+    // Some Android WebViews/PWA browsers can lock scrolling when the root
+    // element uses dynamic viewport sizing with fixed controls. Keep the real
+    // document scrollable on every phone while still preventing sideways drift.
+    document.documentElement.style.height = "auto";
+    document.documentElement.style.minHeight = "100%";
+    document.documentElement.style.overflowX = "hidden";
+    document.documentElement.style.overflowY = "auto";
+
+    document.body.style.height = "auto";
+    document.body.style.minHeight = "100svh";
+    document.body.style.overflowX = "hidden";
+    document.body.style.overflowY = "auto";
+    document.body.style.touchAction = "pan-y pinch-zoom";
   }, [isLightMode]);
 
   useEffect(() => {
@@ -183,20 +219,37 @@ export default function App() {
       setShowInstallButton(!isRunningAsInstalledApp());
     };
 
-    const handleInstallPromptReady = () => updateInstallButtonVisibility();
+    const handleInstallPromptReady = (event: Event) => {
+      event.preventDefault();
+      const installEvent = event as BeforeInstallPromptEvent;
+      window.noorDeferredInstallPrompt = installEvent;
+      setDeferredInstallPrompt(installEvent);
+      setShowInstallButton(!isRunningAsInstalledApp());
+      setInstallHint("");
+    };
+
     const handleAppInstalled = () => {
+      window.noorDeferredInstallPrompt = undefined;
+      setDeferredInstallPrompt(null);
       setShowInstallButton(false);
+      setShowInstallGuide(false);
       setInstallHint("");
     };
 
     updateInstallButtonVisibility();
 
+    if (window.noorDeferredInstallPrompt) {
+      setDeferredInstallPrompt(window.noorDeferredInstallPrompt);
+    }
+
     window.addEventListener("beforeinstallprompt", handleInstallPromptReady);
     window.addEventListener("appinstalled", handleAppInstalled);
+    window.matchMedia?.("(display-mode: standalone)").addEventListener?.("change", updateInstallButtonVisibility);
 
     return () => {
       window.removeEventListener("beforeinstallprompt", handleInstallPromptReady);
       window.removeEventListener("appinstalled", handleAppInstalled);
+      window.matchMedia?.("(display-mode: standalone)").removeEventListener?.("change", updateInstallButtonVisibility);
     };
   }, []);
 
@@ -238,29 +291,49 @@ export default function App() {
   const handleInstallApp = async () => {
     setInstallHint("");
 
-    if (window.noorPromptInstall && window.noorDeferredInstallPrompt) {
-      await window.noorPromptInstall();
-
-      window.setTimeout(() => {
-        if (isRunningAsInstalledApp()) {
-          setShowInstallButton(false);
-          return;
-        }
-
-        setInstallHint("Tap menu, then Install app");
-        window.setTimeout(() => setInstallHint(""), 4200);
-      }, 800);
+    if (isRunningAsInstalledApp()) {
+      setShowInstallButton(false);
+      setShowInstallGuide(false);
       return;
     }
 
-    setInstallHint("Tap menu, then Install app");
+    const installEvent = deferredInstallPrompt || window.noorDeferredInstallPrompt || null;
+
+    if (installEvent) {
+      try {
+        setInstallHint("Opening install...");
+        await installEvent.prompt();
+        const choice = await installEvent.userChoice.catch(() => null);
+
+        window.noorDeferredInstallPrompt = undefined;
+        setDeferredInstallPrompt(null);
+
+        if (choice?.outcome === "accepted" || isRunningAsInstalledApp()) {
+          setShowInstallButton(false);
+          setShowInstallGuide(false);
+          setInstallHint("");
+          return;
+        }
+
+        setInstallHint("Install was cancelled");
+        setShowInstallGuide(true);
+        window.setTimeout(() => setInstallHint(""), 3000);
+        return;
+      } catch {
+        window.noorDeferredInstallPrompt = undefined;
+        setDeferredInstallPrompt(null);
+      }
+    }
+
+    setInstallHint(isLikelyIos() ? "Use Share, then Add to Home Screen" : "Tap menu, then Install app");
+    setShowInstallGuide(true);
     window.setTimeout(() => setInstallHint(""), 4200);
   };
 
   return (
     <AppErrorBoundary isLightMode={isLightMode}>
       <div
-        className={`min-h-dvh w-full overflow-x-hidden transition-colors duration-200 ${
+        className={`noor-scroll-root min-h-screen min-h-[100svh] w-full overflow-x-hidden transition-colors duration-200 ${
           isLightMode ? "bg-slate-50 text-slate-800" : "bg-slate-900 text-white"
         }`}
       >
@@ -312,13 +385,13 @@ export default function App() {
         )}
 
         {showInstallButton && (
-          <div className="fixed right-2 top-1/2 z-[65] -translate-y-1/2 sm:right-4">
+          <div className="pointer-events-none fixed right-2 top-1/2 z-[65] -translate-y-1/2 sm:right-4">
             <button
               type="button"
               onClick={handleInstallApp}
-              aria-label="Download NoorQuran app"
-              title="Download NoorQuran app"
-              className={`group relative flex h-11 w-11 items-center justify-center overflow-visible rounded-2xl border shadow-2xl active:scale-95 ${
+              aria-label="Install NoorQuran app"
+              title="Install NoorQuran app"
+              className={`pointer-events-auto group relative flex h-11 w-11 items-center justify-center overflow-visible rounded-2xl border shadow-2xl active:scale-95 ${
                 isLightMode
                   ? "border-emerald-200 bg-white text-emerald-700 shadow-emerald-900/15"
                   : "border-emerald-500/40 bg-slate-900 text-emerald-300 shadow-emerald-950/40"
@@ -332,7 +405,7 @@ export default function App() {
 
             {installHint && (
               <div
-                className={`absolute right-12 top-1/2 w-max max-w-[11rem] -translate-y-1/2 rounded-2xl border px-3 py-2 text-[10px] font-extrabold shadow-xl ${
+                className={`pointer-events-auto absolute right-12 top-1/2 w-max max-w-[12rem] -translate-y-1/2 rounded-2xl border px-3 py-2 text-[10px] font-extrabold shadow-xl ${
                   isLightMode
                     ? "border-slate-200 bg-white text-slate-700"
                     : "border-slate-700 bg-slate-900 text-slate-100"
@@ -344,7 +417,53 @@ export default function App() {
           </div>
         )}
 
-        <main className="w-full overflow-x-hidden">
+        {showInstallGuide && showInstallButton && (
+          <div className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/55 px-4 backdrop-blur-sm">
+            <div
+              className={`w-full max-w-sm rounded-[1.75rem] border p-5 shadow-2xl ${
+                isLightMode
+                  ? "border-slate-200 bg-white text-slate-900"
+                  : "border-slate-700 bg-slate-900 text-white"
+              }`}
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-base font-black tracking-tight">Install NoorQuran</p>
+                  <p className={`mt-1 text-xs font-semibold leading-relaxed ${isLightMode ? "text-slate-600" : "text-slate-400"}`}>
+                    Your browser did not open the install prompt automatically. Use the quick steps below.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowInstallGuide(false)}
+                  className={`rounded-xl border px-3 py-2 text-xs font-black active:scale-95 ${
+                    isLightMode
+                      ? "border-slate-200 bg-slate-50 text-slate-700"
+                      : "border-slate-700 bg-slate-800 text-slate-200"
+                  }`}
+                >
+                  Close
+                </button>
+              </div>
+
+              <div className="mt-4 space-y-3 text-xs font-bold leading-relaxed">
+                <div className={`rounded-2xl border p-3 ${isLightMode ? "border-emerald-100 bg-emerald-50 text-emerald-900" : "border-emerald-500/25 bg-emerald-500/10 text-emerald-100"}`}>
+                  <p className="font-black">Android Chrome / Edge</p>
+                  <p className="mt-1">Tap the browser menu ⋮, then tap Install app or Add to Home screen.</p>
+                </div>
+                <div className={`rounded-2xl border p-3 ${isLightMode ? "border-slate-200 bg-slate-50 text-slate-700" : "border-slate-700 bg-slate-800 text-slate-200"}`}>
+                  <p className="font-black">iPhone Safari</p>
+                  <p className="mt-1">Tap Share, then Add to Home Screen.</p>
+                </div>
+                <p className={`${isLightMode ? "text-slate-500" : "text-slate-400"}`}>
+                  If you opened this link inside WhatsApp, Facebook, or another in-app browser, open it again in Chrome or Safari first.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <main className="noor-page-scroll w-full overflow-x-hidden pb-28">
           {activeTab === "home" && (
             <HomeScreen
               setActiveTab={setActiveTab}
