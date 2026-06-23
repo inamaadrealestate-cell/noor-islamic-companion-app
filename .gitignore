@@ -12,3 +12,11 @@ backup-before-*
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+node_modules/
+.vercel/
+dist/
+backup-before-*/
+noorquran_*_extracted/
+noorquran_*_patch/
+noorquran_*_upgrade/
+*.zip
