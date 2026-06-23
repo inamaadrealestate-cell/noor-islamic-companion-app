@@ -95,9 +95,15 @@ function isRunningAsInstalledApp(): boolean {
 
   const standaloneDisplay = safeMatchMedia("(display-mode: standalone)")?.matches ?? false;
   const fullscreenDisplay = safeMatchMedia("(display-mode: fullscreen)")?.matches ?? false;
-  const iosStandalone = Boolean(
-    (window.navigator as Navigator & { standalone?: boolean }).standalone,
-  );
+
+  let iosStandalone = false;
+  try {
+    iosStandalone = Boolean(
+      (window.navigator as Navigator & { standalone?: boolean }).standalone,
+    );
+  } catch {
+    iosStandalone = false;
+  }
 
   return standaloneDisplay || fullscreenDisplay || iosStandalone;
 }
@@ -130,6 +136,7 @@ declare global {
     noorDeferredInstallPrompt?: BeforeInstallPromptEvent;
     noorPromptInstall?: () => Promise<boolean>;
     noorApplyUpdate?: () => Promise<void>;
+    noorInstallPromptSetupDone?: boolean;
   }
 }
 
@@ -331,7 +338,7 @@ export default function App() {
     };
 
     const rememberInstallPrompt = (installEvent: BeforeInstallPromptEvent | undefined) => {
-      if (!installEvent) return;
+      if (!installEvent || typeof installEvent.prompt !== "function") return;
       window.noorDeferredInstallPrompt = installEvent;
       setDeferredInstallPrompt(installEvent);
       setShowInstallButton(!isRunningAsInstalledApp());
@@ -439,7 +446,7 @@ export default function App() {
 
     const installEvent = deferredInstallPrompt || window.noorDeferredInstallPrompt || null;
 
-    if (installEvent) {
+    if (installEvent && typeof installEvent.prompt === "function") {
       setIsInstallPromptRunning(true);
       const fallbackTimer = window.setTimeout(() => {
         setIsInstallPromptRunning(false);
@@ -563,7 +570,7 @@ export default function App() {
           </div>
         )}
 
-        {false && showInstallButton && (
+        {showInstallButton && (
           <div className="pointer-events-none fixed right-2 top-1/2 z-[65] -translate-y-1/2 sm:right-4">
             <button
               type="button"
@@ -597,7 +604,7 @@ export default function App() {
           </div>
         )}
 
-        {false && showInstallGuide && showInstallButton && (
+        {showInstallGuide && showInstallButton && (
           <div className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/55 px-4 backdrop-blur-sm">
             <div
               className={`w-full max-w-sm rounded-[1.75rem] border p-5 shadow-2xl ${
@@ -610,7 +617,7 @@ export default function App() {
                 <div>
                   <p className="text-base font-black tracking-tight">Install NoorQuran</p>
                   <p className={`mt-1 text-xs font-semibold leading-relaxed ${isLightMode ? "text-slate-600" : "text-slate-400"}`}>
-                    Your browser did not open the install prompt automatically. Use the quick steps below.
+                    If your browser does not open the direct install dialog, use the quick install steps below.
                   </p>
                 </div>
                 <button
@@ -632,11 +639,15 @@ export default function App() {
                   <p className="mt-1">Tap the browser menu ⋮, then tap Install app or Add to Home screen.</p>
                 </div>
                 <div className={`rounded-2xl border p-3 ${isLightMode ? "border-slate-200 bg-slate-50 text-slate-700" : "border-slate-700 bg-slate-800 text-slate-200"}`}>
+                  <p className="font-black">Desktop Chrome / Edge</p>
+                  <p className="mt-1">Click the install icon in the address bar, or open the browser menu ⋮ and choose Install app.</p>
+                </div>
+                <div className={`rounded-2xl border p-3 ${isLightMode ? "border-slate-200 bg-slate-50 text-slate-700" : "border-slate-700 bg-slate-800 text-slate-200"}`}>
                   <p className="font-black">iPhone Safari</p>
                   <p className="mt-1">Tap Share, then Add to Home Screen.</p>
                 </div>
                 <p className={`${isLightMode ? "text-slate-500" : "text-slate-400"}`}>
-                  If you opened this link inside WhatsApp, Facebook, or another in-app browser, open it again in Chrome or Safari first.
+                  If you opened this link inside WhatsApp, Facebook, Instagram, or another in-app browser, open it again in Chrome, Edge, or Safari first.
                 </p>
               </div>
             </div>

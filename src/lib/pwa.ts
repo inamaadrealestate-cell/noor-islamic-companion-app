@@ -89,6 +89,8 @@ declare global {
     noorDeferredInstallPrompt?: BeforeInstallPromptEvent;
     noorPromptInstall?: () => Promise<boolean>;
     noorApplyUpdate?: () => Promise<void>;
+    noorInstallPromptSetupDone?: boolean;
+    noorPwaRuntimeStarted?: boolean;
   }
 }
 
@@ -943,15 +945,27 @@ export function restartNoorReminderScheduler(): void {
 function setupInstallPrompt(): void {
   if (!hasWindow() || isStandaloneMode()) return;
 
-  window.addEventListener("beforeinstallprompt", (rawEvent) => {
-    rawEvent.preventDefault();
-    window.noorDeferredInstallPrompt = rawEvent as BeforeInstallPromptEvent;
-    safeDispatchEvent("noor-install-ready");
-  });
+  if (!window.noorInstallPromptSetupDone) {
+    window.noorInstallPromptSetupDone = true;
+
+    window.addEventListener("beforeinstallprompt", (rawEvent) => {
+      rawEvent.preventDefault();
+
+      const installEvent = rawEvent as BeforeInstallPromptEvent;
+      if (typeof installEvent.prompt !== "function") return;
+
+      window.noorDeferredInstallPrompt = installEvent;
+      safeDispatchEvent("noor-install-ready");
+    });
+
+    window.addEventListener("appinstalled", () => {
+      window.noorDeferredInstallPrompt = undefined;
+    });
+  }
 
   window.noorPromptInstall = async () => {
     const event = window.noorDeferredInstallPrompt;
-    if (!event) return false;
+    if (!event || typeof event.prompt !== "function") return false;
 
     try {
       await event.prompt();
@@ -963,10 +977,6 @@ function setupInstallPrompt(): void {
       return false;
     }
   };
-
-  window.addEventListener("appinstalled", () => {
-    window.noorDeferredInstallPrompt = undefined;
-  });
 }
 
 if (hasWindow()) {
@@ -998,6 +1008,8 @@ if (hasWindow()) {
   };
 
   const startNoorPwaRuntime = () => {
+    if (window.noorPwaRuntimeStarted) return;
+    window.noorPwaRuntimeStarted = true;
     registerNoorServiceWorker().catch(() => undefined);
     startNoorReminderScheduler();
   };

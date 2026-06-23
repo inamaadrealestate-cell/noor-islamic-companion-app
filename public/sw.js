@@ -1,5 +1,5 @@
-const CACHE_NAME = "noorquran-shell-v11-remove-install-prompt";
-const CONTENT_CACHE_NAME = "noorquran-content-v11-remove-install-prompt";
+const CACHE_NAME = "noorquran-shell-v12-install-reminder-fix";
+const CONTENT_CACHE_NAME = "noorquran-content-v12-install-reminder-fix";
 
 const APP_SHELL = [
   "/",
