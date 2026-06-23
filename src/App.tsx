@@ -112,28 +112,6 @@ function isLikelyIos(): boolean {
   return /iphone|ipad|ipod/i.test(userAgent) || (platform === "MacIntel" && maxTouchPoints > 1);
 }
 
-
-function safeScrollToTop(): void {
-  if (typeof window === "undefined") return;
-
-  try {
-    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
-    return;
-  } catch {}
-
-  try {
-    window.scrollTo(0, 0);
-  } catch {}
-}
-
-function safeSupportsCss(property: string, value: string): boolean {
-  try {
-    return typeof CSS !== "undefined" && typeof CSS.supports === "function" && CSS.supports(property, value);
-  } catch {
-    return false;
-  }
-}
-
 function isSamsungLikeBrowser(): boolean {
   if (typeof navigator === "undefined") return false;
 
@@ -179,20 +157,12 @@ class AppErrorBoundary extends Component<AppErrorBoundaryProps, AppErrorBoundary
   }
 
   private handleReload = () => {
-    try {
-      window.location.reload();
-    } catch {
-      // Keep current session alive if a restricted browser blocks reload.
-    }
+    window.location.reload();
   };
 
   private handleResetView = () => {
     safeLocalRemove(LAST_TAB_KEY);
-    try {
-      window.location.reload();
-    } catch {
-      // Keep current session alive if a restricted browser blocks reload.
-    }
+    window.location.reload();
   };
 
   render() {
@@ -286,7 +256,8 @@ export default function App() {
     document.documentElement.style.overflowY = "auto";
 
     document.body.style.height = "auto";
-    const supportsSmallViewport = safeSupportsCss("height", "100svh");
+    const supportsSmallViewport =
+      typeof CSS !== "undefined" && typeof CSS.supports === "function" && CSS.supports("height", "100svh");
 
     document.body.style.minHeight = supportsSmallViewport ? "100svh" : "100vh";
     document.body.style.overflowX = "hidden";
@@ -418,7 +389,7 @@ export default function App() {
       setActiveTabState(tab);
       // Instant scroll avoids Samsung Internet crashes linked to smooth scrolling
       // while fixed PWA controls are mounted.
-      safeScrollToTop();
+      window.scrollTo(0, 0);
     }
   };
 
@@ -452,11 +423,7 @@ export default function App() {
       // If the browser blocks service-worker update checks, fall back to a normal reload.
     }
 
-    try {
-      window.location.reload();
-    } catch {
-      // Keep current session alive if a restricted browser blocks reload.
-    }
+    window.location.reload();
   };
 
   const handleInstallApp = async () => {
@@ -596,7 +563,7 @@ export default function App() {
           </div>
         )}
 
-        {showInstallButton && (
+        {false && showInstallButton && (
           <div className="pointer-events-none fixed right-2 top-1/2 z-[65] -translate-y-1/2 sm:right-4">
             <button
               type="button"
@@ -630,7 +597,7 @@ export default function App() {
           </div>
         )}
 
-        {showInstallGuide && showInstallButton && (
+        {false && showInstallGuide && showInstallButton && (
           <div className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/55 px-4 backdrop-blur-sm">
             <div
               className={`w-full max-w-sm rounded-[1.75rem] border p-5 shadow-2xl ${
