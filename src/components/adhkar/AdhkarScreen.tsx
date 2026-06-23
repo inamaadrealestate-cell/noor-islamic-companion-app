@@ -255,7 +255,7 @@ export default function AdhkarScreen({ isLightMode }: AdhkarScreenProps) {
     saveAdhkarReminderSettings(updatedSettings);
     setNotificationsEnabled(next);
     safeLocalSet('noor_adhkar_notif', String(next));
-    showToast(next ? 'Adhkar reminders enabled' : 'Adhkar reminders turned off');
+    showToast(next ? 'Adhkar and Ayyamul Bid reminders enabled' : 'Reminders turned off');
   };
 
   const copyText = async (text: string) => {
@@ -343,7 +343,7 @@ export default function AdhkarScreen({ isLightMode }: AdhkarScreenProps) {
                     ? 'border-emerald-300 bg-emerald-500 text-white shadow-lg'
                     : 'border-white/20 bg-white/10 text-emerald-100 hover:bg-white/15'
                 }`}
-                title={notificationsEnabled ? 'Adhkar reminders enabled' : 'Enable adhkar reminders'}
+                title={notificationsEnabled ? 'Daily and Ayyamul Bid reminders enabled' : 'Enable daily and Ayyamul Bid reminders'}
               >
                 <Bell className={`h-5 w-5 ${notificationsEnabled ? 'fill-current' : ''}`} />
               </button>
@@ -369,7 +369,7 @@ export default function AdhkarScreen({ isLightMode }: AdhkarScreenProps) {
           </div>
 
           <div className={`px-5 py-4 text-xs leading-relaxed ${mutedText}`}>
-            Track your daily adhkar locally on this device. Reminders are {reminderSettings.enabled ? 'active' : 'off'} — morning {reminderSettings.morning.time}, evening {reminderSettings.evening.time}, and more times can be adjusted in Settings.
+            Track your daily adhkar locally on this device. Reminders are {reminderSettings.enabled ? 'active' : 'off'} — morning {reminderSettings.morning.time}, evening {reminderSettings.evening.time}. NoorQuran also reminds you to fast Ayyamul Bid on the 13th, 14th, and 15th of every Islamic month when notifications are allowed.
           </div>
         </div>
 

@@ -58,6 +58,8 @@ const REMINDER_STORAGE_KEY = "noor_adhkar_reminder_settings";
 const REMINDER_FIRED_KEY = "noor_adhkar_reminders_fired";
 const PRAYER_LOCATION_STORAGE_KEY = "noor_prayer_location";
 const PRAYER_TIMINGS_CACHE_KEY = "noor_prayer_timings_cache";
+const AYYAMUL_BID_ENABLED_KEY = "noor_ayyamul_bid_reminders_enabled";
+const AYYAMUL_BID_FIRED_KEY = "noor_ayyamul_bid_reminders_fired";
 
 export const DEFAULT_ADHKAR_REMINDER_SETTINGS: NoorAdhkarReminderSettings = {
   enabled: false,
@@ -159,6 +161,166 @@ function safeParse<T>(raw: string | null, fallback: T): T {
     return JSON.parse(raw) as T;
   } catch {
     return fallback;
+  }
+}
+
+
+const ISLAMIC_MONTH_NAMES = [
+  "Muharram",
+  "Safar",
+  "Rabi al-Awwal",
+  "Rabi al-Thani",
+  "Jumada al-Awwal",
+  "Jumada al-Thani",
+  "Rajab",
+  "Shaban",
+  "Ramadan",
+  "Shawwal",
+  "Dhul Qadah",
+  "Dhul Hijjah",
+];
+
+interface IslamicDateParts {
+  day: number;
+  month: number;
+  year: number;
+}
+
+export interface AyyamulBidReminderInfo {
+  islamicDay: number;
+  islamicMonth: number;
+  islamicYear: number;
+  monthName: string;
+  isAyyamulBidDay: boolean;
+  isPreparationDay: boolean;
+  label: string;
+}
+
+function parseIslamicDateWithCalendar(calendar: string, date: Date): IslamicDateParts | null {
+  if (typeof Intl === "undefined" || typeof Intl.DateTimeFormat !== "function") return null;
+
+  try {
+    const parts = new Intl.DateTimeFormat(`en-u-ca-${calendar}`, {
+      day: "numeric",
+      month: "numeric",
+      year: "numeric",
+    }).formatToParts(date);
+
+    const day = Number(parts.find((part) => part.type === "day")?.value);
+    const month = Number(parts.find((part) => part.type === "month")?.value);
+    const year = Number(parts.find((part) => part.type === "year")?.value);
+
+    if (!Number.isFinite(day) || !Number.isFinite(month) || !Number.isFinite(year)) return null;
+    if (day < 1 || day > 30 || month < 1 || month > 12) return null;
+
+    return { day, month, year };
+  } catch {
+    return null;
+  }
+}
+
+function getIslamicDateParts(date = new Date()): IslamicDateParts | null {
+  return (
+    parseIslamicDateWithCalendar("islamic-umalqura", date) ||
+    parseIslamicDateWithCalendar("islamic", date) ||
+    parseIslamicDateWithCalendar("islamic-civil", date)
+  );
+}
+
+function getIslamicMonthName(month: number): string {
+  return ISLAMIC_MONTH_NAMES[month - 1] || `Islamic month ${month}`;
+}
+
+function localMinutes(date: Date): number {
+  return date.getHours() * 60 + date.getMinutes();
+}
+
+function hasReachedLocalTime(date: Date, time: string): boolean {
+  const [hours, minutes] = time.split(":").map(Number);
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return false;
+  return localMinutes(date) >= hours * 60 + minutes;
+}
+
+export function getAyyamulBidReminderEnabled(): boolean {
+  return safeGet(AYYAMUL_BID_ENABLED_KEY) !== "false";
+}
+
+export function saveAyyamulBidReminderEnabled(enabled: boolean): void {
+  safeSet(AYYAMUL_BID_ENABLED_KEY, enabled ? "true" : "false");
+  safeDispatchEvent("noor-ayyamul-bid-reminders-changed", { enabled });
+  restartNoorReminderScheduler();
+}
+
+export function getCurrentAyyamulBidInfo(date = new Date()): AyyamulBidReminderInfo | null {
+  const islamicDate = getIslamicDateParts(date);
+  if (!islamicDate) return null;
+
+  const monthName = getIslamicMonthName(islamicDate.month);
+  const isAyyamulBidDay = [13, 14, 15].includes(islamicDate.day);
+  const isPreparationDay = [12, 13, 14].includes(islamicDate.day);
+
+  return {
+    islamicDay: islamicDate.day,
+    islamicMonth: islamicDate.month,
+    islamicYear: islamicDate.year,
+    monthName,
+    isAyyamulBidDay,
+    isPreparationDay,
+    label: `${islamicDate.day} ${monthName} ${islamicDate.year} AH`,
+  };
+}
+
+function readAyyamulBidFiredKeys(): string[] {
+  return safeParse<string[]>(safeGet(AYYAMUL_BID_FIRED_KEY), []);
+}
+
+function hasAyyamulBidReminderFired(key: string): boolean {
+  return readAyyamulBidFiredKeys().includes(key);
+}
+
+function markAyyamulBidReminderFired(key: string): void {
+  const current = readAyyamulBidFiredKeys();
+  const prefix = key.split(":").slice(0, 2).join(":");
+  const cleaned = current.filter((item) => item.startsWith(prefix));
+  if (!cleaned.includes(key)) cleaned.push(key);
+  safeSet(AYYAMUL_BID_FIRED_KEY, JSON.stringify(cleaned));
+}
+
+async function checkAyyamulBidReminders(now: Date): Promise<void> {
+  if (!getAyyamulBidReminderEnabled()) return;
+
+  const info = getCurrentAyyamulBidInfo(now);
+  if (!info) return;
+
+  const datePrefix = `${info.islamicYear}-${info.islamicMonth}-${info.islamicDay}`;
+
+  if (info.isPreparationDay && hasReachedLocalTime(now, "18:00")) {
+    const nextDay = info.islamicDay + 1;
+    const key = `${datePrefix}:ayyamul-bid-night-before-${nextDay}`;
+    if (!hasAyyamulBidReminderFired(key)) {
+      const shown = await showNoorNotification({
+        title: "Ayyamul Bid fasting reminder",
+        body: `Tomorrow is the ${nextDay}th day of ${info.monthName}. Prepare to fast if you are able. Please confirm local moon-sighting if needed.`,
+        tag: `noorquran-ayyamul-bid-night-${info.islamicYear}-${info.islamicMonth}-${nextDay}`,
+        url: "/?tab=adhkar",
+      });
+      if (shown) markAyyamulBidReminderFired(key);
+    }
+
+    return;
+  }
+
+  if (info.isAyyamulBidDay && hasReachedLocalTime(now, "03:30")) {
+    const key = `${datePrefix}:ayyamul-bid-day-${info.islamicDay}`;
+    if (!hasAyyamulBidReminderFired(key)) {
+      const shown = await showNoorNotification({
+        title: "Fast Ayyamul Bid today",
+        body: `Today is ${info.label}, one of the white days. Fast today if you are able. Please confirm local moon-sighting if needed.`,
+        tag: `noorquran-ayyamul-bid-day-${info.islamicYear}-${info.islamicMonth}-${info.islamicDay}`,
+        url: "/?tab=adhkar",
+      });
+      if (shown) markAyyamulBidReminderFired(key);
+    }
   }
 }
 
@@ -599,12 +761,15 @@ async function runReminderTick(): Promise<void> {
   reminderTickInProgress = true;
 
   try {
-    const settings = getAdhkarReminderSettings();
-    if (!settings.enabled) return;
     if (!hasWindow() || !("Notification" in window) || Notification.permission !== "granted") return;
 
     const now = new Date();
     const currentTime = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+
+    await checkAyyamulBidReminders(now);
+
+    const settings = getAdhkarReminderSettings();
+    if (!settings.enabled) return;
 
     await checkFixedTimeReminders(settings, currentTime, now);
     await checkAfterPrayerReminders(settings, currentTime);
