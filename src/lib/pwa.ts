@@ -160,10 +160,19 @@ function safeSet(key: string, value: string): void {
 function safeParse<T>(raw: string | null, fallback: T): T {
   if (!raw) return fallback;
   try {
-    return JSON.parse(raw) as T;
+    const parsed = JSON.parse(raw) as T | null | undefined;
+    return parsed === null || typeof parsed === "undefined" ? fallback : (parsed as T);
   } catch {
     return fallback;
   }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function asStringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
 }
 
 
@@ -318,7 +327,7 @@ export function getCurrentTasuaAshuraInfo(date = new Date()): TasuaAshuraReminde
 }
 
 function readTasuaAshuraFiredKeys(): string[] {
-  return safeParse<string[]>(safeGet(TASUA_ASHURA_FIRED_KEY), []);
+  return asStringArray(safeParse<unknown>(safeGet(TASUA_ASHURA_FIRED_KEY), []));
 }
 
 function hasTasuaAshuraReminderFired(key: string): boolean {
@@ -326,10 +335,10 @@ function hasTasuaAshuraReminderFired(key: string): boolean {
 }
 
 function markTasuaAshuraReminderFired(key: string): void {
-  const current = readTasuaAshuraFiredKeys().filter((item) => typeof item === "string");
+  const current = readTasuaAshuraFiredKeys();
   const [datePrefix] = key.split(":");
-  const yearPrefix = datePrefix.split("-").slice(0, 1).join("-");
-  const cleaned = current.filter((item) => item.startsWith(yearPrefix)).slice(-30);
+  const [yearPrefix] = datePrefix.split("-");
+  const cleaned = current.filter((item) => item.startsWith(`${yearPrefix}-`)).slice(-30);
 
   if (!cleaned.includes(key)) cleaned.push(key);
   safeSet(TASUA_ASHURA_FIRED_KEY, JSON.stringify(cleaned));
@@ -397,7 +406,7 @@ async function checkTasuaAshuraReminders(now: Date): Promise<void> {
 }
 
 function readAyyamulBidFiredKeys(): string[] {
-  return safeParse<string[]>(safeGet(AYYAMUL_BID_FIRED_KEY), []);
+  return asStringArray(safeParse<unknown>(safeGet(AYYAMUL_BID_FIRED_KEY), []));
 }
 
 function hasAyyamulBidReminderFired(key: string): boolean {
@@ -405,9 +414,10 @@ function hasAyyamulBidReminderFired(key: string): boolean {
 }
 
 function markAyyamulBidReminderFired(key: string): void {
-  const current = readAyyamulBidFiredKeys().filter((item) => typeof item === "string");
+  const current = readAyyamulBidFiredKeys();
   const [datePrefix] = key.split(":");
-  const monthPrefix = datePrefix.split("-").slice(0, 2).join("-");
+  const [year, month] = datePrefix.split("-");
+  const monthPrefix = `${year}-${month}-`;
   const cleaned = current.filter((item) => item.startsWith(monthPrefix)).slice(-40);
 
   if (!cleaned.includes(key)) cleaned.push(key);
@@ -422,6 +432,19 @@ async function checkAyyamulBidReminders(now: Date): Promise<void> {
 
   const datePrefix = `${info.islamicYear}-${info.islamicMonth}-${info.islamicDay}`;
 
+  if (info.isAyyamulBidDay && hasReachedLocalTime(now, "03:30")) {
+    const key = `${datePrefix}:ayyamul-bid-day-${info.islamicDay}`;
+    if (!hasAyyamulBidReminderFired(key)) {
+      const shown = await showNoorNotification({
+        title: "Fast Ayyamul Bid today",
+        body: `Today is ${info.label}, one of the white days. Fast today if you are able. Please confirm local moon-sighting if needed.`,
+        tag: `noorquran-ayyamul-bid-day-${info.islamicYear}-${info.islamicMonth}-${info.islamicDay}`,
+        url: "/?tab=adhkar",
+      });
+      if (shown) markAyyamulBidReminderFired(key);
+    }
+  }
+
   if (info.isPreparationDay && hasReachedLocalTime(now, "18:00")) {
     const nextDay = info.islamicDay + 1;
     const key = `${datePrefix}:ayyamul-bid-night-before-${nextDay}`;
@@ -430,21 +453,6 @@ async function checkAyyamulBidReminders(now: Date): Promise<void> {
         title: "Ayyamul Bid fasting reminder",
         body: `Tomorrow is the ${nextDay}th day of ${info.monthName}. Prepare to fast if you are able. Please confirm local moon-sighting if needed.`,
         tag: `noorquran-ayyamul-bid-night-${info.islamicYear}-${info.islamicMonth}-${nextDay}`,
-        url: "/?tab=adhkar",
-      });
-      if (shown) markAyyamulBidReminderFired(key);
-    }
-
-    return;
-  }
-
-  if (info.isAyyamulBidDay && hasReachedLocalTime(now, "03:30")) {
-    const key = `${datePrefix}:ayyamul-bid-day-${info.islamicDay}`;
-    if (!hasAyyamulBidReminderFired(key)) {
-      const shown = await showNoorNotification({
-        title: "Fast Ayyamul Bid today",
-        body: `Today is ${info.label}, one of the white days. Fast today if you are able. Please confirm local moon-sighting if needed.`,
-        tag: `noorquran-ayyamul-bid-day-${info.islamicYear}-${info.islamicMonth}-${info.islamicDay}`,
         url: "/?tab=adhkar",
       });
       if (shown) markAyyamulBidReminderFired(key);
@@ -469,10 +477,8 @@ function normalizeDelay(value: unknown): number {
 }
 
 export function getAdhkarReminderSettings(): NoorAdhkarReminderSettings {
-  const parsed = safeParse<Partial<NoorAdhkarReminderSettings>>(
-    safeGet(REMINDER_STORAGE_KEY),
-    {},
-  );
+  const parsedRaw = safeParse<unknown>(safeGet(REMINDER_STORAGE_KEY), {});
+  const parsed = isRecord(parsedRaw) ? (parsedRaw as Partial<NoorAdhkarReminderSettings>) : {};
 
   return {
     enabled: normalizeBoolean(parsed.enabled, DEFAULT_ADHKAR_REMINDER_SETTINGS.enabled),
@@ -728,7 +734,7 @@ function timePlusMinutes(time: string, minutesToAdd: number): string | null {
 }
 
 function readFiredReminderKeys(): string[] {
-  return safeParse<string[]>(safeGet(REMINDER_FIRED_KEY), []);
+  return asStringArray(safeParse<unknown>(safeGet(REMINDER_FIRED_KEY), []));
 }
 
 function hasReminderFired(key: string): boolean {
@@ -770,8 +776,11 @@ function readPrayerLocation(): PrayerLocationCache {
 }
 
 function readCalculationMethod(): number {
-  const parsed = safeParse<{ calculation_method?: number }>(safeGet("noor_settings"), {});
-  return Number(parsed.calculation_method || 4);
+  const parsed = safeParse<unknown>(safeGet("noor_settings"), {});
+  if (!isRecord(parsed)) return 4;
+
+  const method = Number(parsed.calculation_method || 4);
+  return Number.isFinite(method) && method > 0 ? method : 4;
 }
 
 function getPrayerLocationKey(location: PrayerLocationCache): string {
@@ -912,6 +921,7 @@ async function runReminderTick(): Promise<void> {
 
 export function startNoorReminderScheduler(): void {
   if (!hasWindow() || reminderIntervalId !== null) return;
+  if (!("Notification" in window) || Notification.permission !== "granted") return;
 
   runReminderTick().catch(() => undefined);
   reminderIntervalId = window.setInterval(() => {

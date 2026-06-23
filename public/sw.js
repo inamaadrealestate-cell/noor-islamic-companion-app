@@ -1,5 +1,5 @@
-const CACHE_NAME = "noorquran-shell-v9-tasua-ashura";
-const CONTENT_CACHE_NAME = "noorquran-content-v9-tasua-ashura";
+const CACHE_NAME = "noorquran-shell-v10-reminder-error-fix";
+const CONTENT_CACHE_NAME = "noorquran-content-v10-reminder-error-fix";
 
 const APP_SHELL = [
   "/",
@@ -186,9 +186,17 @@ self.addEventListener("fetch", function (event) {
 
 self.addEventListener("notificationclick", function (event) {
   event.notification.close();
-  const targetUrl = event.notification && event.notification.data && event.notification.data.url
+
+  const rawTargetUrl = event.notification && event.notification.data && event.notification.data.url
     ? event.notification.data.url
     : "/";
+
+  let targetUrl = self.location.origin + "/";
+  try {
+    targetUrl = new URL(rawTargetUrl, self.location.origin).href;
+  } catch (error) {
+    targetUrl = self.location.origin + "/";
+  }
 
   event.waitUntil(
     self.clients
@@ -202,6 +210,9 @@ self.addEventListener("notificationclick", function (event) {
           }
         }
         if (self.clients.openWindow) return self.clients.openWindow(targetUrl);
+        return undefined;
+      })
+      .catch(function () {
         return undefined;
       }),
   );
