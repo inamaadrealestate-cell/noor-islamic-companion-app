@@ -146,7 +146,7 @@ const REVIEW_CHECKLIST = [
 const NOORQURAN_PUBLIC_URL = "https://noorquran-eight.vercel.app";
 
 const NOORQURAN_INVITE_TEXT =
-  "Assalamu alaykum. I found NoorQuran, a clean Islamic companion app for Quran reading, recitations, Salah times, Adhkar, Duas, Tasbih, Qibla, reminders, and offline reading. You can use it in the browser or install it like an app.";
+  "Assalamu alaykum. Try out my NoorQuran, a clean Islamic companion app for Quran reading, recitations, Salah times, Adhkar, Duas, Tasbih, Qibla, reminders, and offline reading. You can use it in the browser or install it to get the full experience.";
 
 const SHARE_HIGHLIGHTS = [
   "Quran reading with bookmarks and notes",

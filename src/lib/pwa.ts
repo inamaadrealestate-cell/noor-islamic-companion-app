@@ -60,6 +60,8 @@ const PRAYER_LOCATION_STORAGE_KEY = "noor_prayer_location";
 const PRAYER_TIMINGS_CACHE_KEY = "noor_prayer_timings_cache";
 const AYYAMUL_BID_ENABLED_KEY = "noor_ayyamul_bid_reminders_enabled";
 const AYYAMUL_BID_FIRED_KEY = "noor_ayyamul_bid_reminders_fired";
+const TASUA_ASHURA_ENABLED_KEY = "noor_tasua_ashura_reminders_enabled";
+const TASUA_ASHURA_FIRED_KEY = "noor_tasua_ashura_reminders_fired";
 
 export const DEFAULT_ADHKAR_REMINDER_SETTINGS: NoorAdhkarReminderSettings = {
   enabled: false,
@@ -196,6 +198,19 @@ export interface AyyamulBidReminderInfo {
   label: string;
 }
 
+export interface TasuaAshuraReminderInfo {
+  islamicDay: number;
+  islamicMonth: number;
+  islamicYear: number;
+  monthName: string;
+  isMuharram: boolean;
+  isTasuaDay: boolean;
+  isAshuraDay: boolean;
+  isTasuaPreparationDay: boolean;
+  isAshuraPreparationDay: boolean;
+  label: string;
+}
+
 function parseIslamicDateWithCalendar(calendar: string, date: Date): IslamicDateParts | null {
   if (typeof Intl === "undefined" || typeof Intl.DateTimeFormat !== "function") return null;
 
@@ -269,6 +284,116 @@ export function getCurrentAyyamulBidInfo(date = new Date()): AyyamulBidReminderI
     isPreparationDay,
     label: `${islamicDate.day} ${monthName} ${islamicDate.year} AH`,
   };
+}
+
+export function getTasuaAshuraReminderEnabled(): boolean {
+  return safeGet(TASUA_ASHURA_ENABLED_KEY) !== "false";
+}
+
+export function saveTasuaAshuraReminderEnabled(enabled: boolean): void {
+  safeSet(TASUA_ASHURA_ENABLED_KEY, enabled ? "true" : "false");
+  safeDispatchEvent("noor-tasua-ashura-reminders-changed", { enabled });
+  restartNoorReminderScheduler();
+}
+
+export function getCurrentTasuaAshuraInfo(date = new Date()): TasuaAshuraReminderInfo | null {
+  const islamicDate = getIslamicDateParts(date);
+  if (!islamicDate) return null;
+
+  const monthName = getIslamicMonthName(islamicDate.month);
+  const isMuharram = islamicDate.month === 1;
+
+  return {
+    islamicDay: islamicDate.day,
+    islamicMonth: islamicDate.month,
+    islamicYear: islamicDate.year,
+    monthName,
+    isMuharram,
+    isTasuaDay: isMuharram && islamicDate.day === 9,
+    isAshuraDay: isMuharram && islamicDate.day === 10,
+    isTasuaPreparationDay: isMuharram && islamicDate.day === 8,
+    isAshuraPreparationDay: isMuharram && islamicDate.day === 9,
+    label: `${islamicDate.day} ${monthName} ${islamicDate.year} AH`,
+  };
+}
+
+function readTasuaAshuraFiredKeys(): string[] {
+  return safeParse<string[]>(safeGet(TASUA_ASHURA_FIRED_KEY), []);
+}
+
+function hasTasuaAshuraReminderFired(key: string): boolean {
+  return readTasuaAshuraFiredKeys().includes(key);
+}
+
+function markTasuaAshuraReminderFired(key: string): void {
+  const current = readTasuaAshuraFiredKeys().filter((item) => typeof item === "string");
+  const [datePrefix] = key.split(":");
+  const yearPrefix = datePrefix.split("-").slice(0, 1).join("-");
+  const cleaned = current.filter((item) => item.startsWith(yearPrefix)).slice(-30);
+
+  if (!cleaned.includes(key)) cleaned.push(key);
+  safeSet(TASUA_ASHURA_FIRED_KEY, JSON.stringify(cleaned));
+}
+
+async function checkTasuaAshuraReminders(now: Date): Promise<void> {
+  if (!getTasuaAshuraReminderEnabled()) return;
+
+  const info = getCurrentTasuaAshuraInfo(now);
+  if (!info || !info.isMuharram) return;
+
+  const datePrefix = `${info.islamicYear}-${info.islamicMonth}-${info.islamicDay}`;
+
+  if (info.isTasuaDay && hasReachedLocalTime(now, "03:30")) {
+    const key = `${datePrefix}:tasua-day`;
+    if (!hasTasuaAshuraReminderFired(key)) {
+      const shown = await showNoorNotification({
+        title: "Fast Tasu'a today",
+        body: "Today is 9 Muharram, the day of Tasu'a. Fast today if you are able and prepare for Ashura tomorrow. Please confirm local moon-sighting if needed.",
+        tag: `noorquran-tasua-day-${info.islamicYear}`,
+        url: "/?tab=adhkar",
+      });
+      if (shown) markTasuaAshuraReminderFired(key);
+    }
+  }
+
+  if (info.isAshuraDay && hasReachedLocalTime(now, "03:30")) {
+    const key = `${datePrefix}:ashura-day`;
+    if (!hasTasuaAshuraReminderFired(key)) {
+      const shown = await showNoorNotification({
+        title: "Fast Ashura today",
+        body: "Today is 10 Muharram, the day of Ashura. Fast today if you are able. Please confirm local moon-sighting if needed.",
+        tag: `noorquran-ashura-day-${info.islamicYear}`,
+        url: "/?tab=adhkar",
+      });
+      if (shown) markTasuaAshuraReminderFired(key);
+    }
+  }
+
+  if (info.isTasuaPreparationDay && hasReachedLocalTime(now, "18:00")) {
+    const key = `${datePrefix}:tasua-night-before`;
+    if (!hasTasuaAshuraReminderFired(key)) {
+      const shown = await showNoorNotification({
+        title: "Tasu'a fasting reminder",
+        body: "Tomorrow is 9 Muharram, the day of Tasu'a. Prepare to fast if you are able. Please confirm local moon-sighting if needed.",
+        tag: `noorquran-tasua-night-${info.islamicYear}`,
+        url: "/?tab=adhkar",
+      });
+      if (shown) markTasuaAshuraReminderFired(key);
+    }
+  }
+
+  if (info.isAshuraPreparationDay && hasReachedLocalTime(now, "18:00")) {
+    const key = `${datePrefix}:ashura-night-before`;
+    if (!hasTasuaAshuraReminderFired(key)) {
+      const shown = await showNoorNotification({
+        title: "Ashura fasting reminder",
+        body: "Tomorrow is 10 Muharram, the day of Ashura. Prepare to fast if you are able. Please confirm local moon-sighting if needed.",
+        tag: `noorquran-ashura-night-${info.islamicYear}`,
+        url: "/?tab=adhkar",
+      });
+      if (shown) markTasuaAshuraReminderFired(key);
+    }
+  }
 }
 
 function readAyyamulBidFiredKeys(): string[] {
@@ -772,6 +897,7 @@ async function runReminderTick(): Promise<void> {
     const now = new Date();
     const currentTime = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
 
+    await checkTasuaAshuraReminders(now);
     await checkAyyamulBidReminders(now);
 
     const settings = getAdhkarReminderSettings();
@@ -876,6 +1002,7 @@ if (hasWindow()) {
     if (
       event.key === REMINDER_STORAGE_KEY ||
       event.key === AYYAMUL_BID_ENABLED_KEY ||
+      event.key === TASUA_ASHURA_ENABLED_KEY ||
       event.key === "noor_settings" ||
       event.key === PRAYER_LOCATION_STORAGE_KEY
     ) {
@@ -884,6 +1011,10 @@ if (hasWindow()) {
   });
 
   window.addEventListener("noor-ayyamul-bid-reminders-changed", () => {
+    restartNoorReminderScheduler();
+  });
+
+  window.addEventListener("noor-tasua-ashura-reminders-changed", () => {
     restartNoorReminderScheduler();
   });
 
