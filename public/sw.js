@@ -1,5 +1,5 @@
-const CACHE_NAME = "noorquran-shell-v7-safari-safe";
-const CONTENT_CACHE_NAME = "noorquran-content-v7-safari-safe";
+const CACHE_NAME = "noorquran-shell-v8-error-safe";
+const CONTENT_CACHE_NAME = "noorquran-content-v8-error-safe";
 
 const APP_SHELL = [
   "/",

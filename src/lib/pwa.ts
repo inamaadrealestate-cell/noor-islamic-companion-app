@@ -200,10 +200,11 @@ function parseIslamicDateWithCalendar(calendar: string, date: Date): IslamicDate
   if (typeof Intl === "undefined" || typeof Intl.DateTimeFormat !== "function") return null;
 
   try {
-    const parts = new Intl.DateTimeFormat(`en-u-ca-${calendar}`, {
+    const parts = new Intl.DateTimeFormat(`en-US-u-ca-${calendar}-nu-latn`, {
       day: "numeric",
       month: "numeric",
       year: "numeric",
+      numberingSystem: "latn",
     }).formatToParts(date);
 
     const day = Number(parts.find((part) => part.type === "day")?.value);
@@ -279,9 +280,11 @@ function hasAyyamulBidReminderFired(key: string): boolean {
 }
 
 function markAyyamulBidReminderFired(key: string): void {
-  const current = readAyyamulBidFiredKeys();
-  const prefix = key.split(":").slice(0, 2).join(":");
-  const cleaned = current.filter((item) => item.startsWith(prefix));
+  const current = readAyyamulBidFiredKeys().filter((item) => typeof item === "string");
+  const [datePrefix] = key.split(":");
+  const monthPrefix = datePrefix.split("-").slice(0, 2).join("-");
+  const cleaned = current.filter((item) => item.startsWith(monthPrefix)).slice(-40);
+
   if (!cleaned.includes(key)) cleaned.push(key);
   safeSet(AYYAMUL_BID_FIRED_KEY, JSON.stringify(cleaned));
 }
@@ -573,7 +576,10 @@ export async function showAdhkarReminderTest(): Promise<boolean> {
 }
 
 function getTodayKey(date = new Date()): string {
-  return date.toISOString().split("T")[0];
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 function getMinuteKey(date = new Date()): string {
@@ -833,7 +839,7 @@ if (hasWindow()) {
 
     try {
       registration = hasNavigator() && "serviceWorker" in navigator
-        ? await navigator.serviceWorker.getRegistration()
+        ? (await navigator.serviceWorker.getRegistration()) || null
         : null;
     } catch {
       registration = null;
@@ -867,9 +873,18 @@ if (hasWindow()) {
   }
 
   window.addEventListener("storage", (event) => {
-    if (event.key === REMINDER_STORAGE_KEY || event.key === "noor_settings" || event.key === PRAYER_LOCATION_STORAGE_KEY) {
+    if (
+      event.key === REMINDER_STORAGE_KEY ||
+      event.key === AYYAMUL_BID_ENABLED_KEY ||
+      event.key === "noor_settings" ||
+      event.key === PRAYER_LOCATION_STORAGE_KEY
+    ) {
       restartNoorReminderScheduler();
     }
+  });
+
+  window.addEventListener("noor-ayyamul-bid-reminders-changed", () => {
+    restartNoorReminderScheduler();
   });
 
   setupInstallPrompt();
