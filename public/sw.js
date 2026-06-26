@@ -1,5 +1,5 @@
-const CACHE_NAME = "noorquran-shell-v12-install-reminder-fix";
-const CONTENT_CACHE_NAME = "noorquran-content-v12-install-reminder-fix";
+const CACHE_NAME = "noorquran-shell-v13-morning-evening-adhkar";
+const CONTENT_CACHE_NAME = "noorquran-content-v13-morning-evening-adhkar";
 
 const APP_SHELL = [
   "/",

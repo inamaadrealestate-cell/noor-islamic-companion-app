@@ -54,33 +54,33 @@ function getTodayKey(): string {
   return new Date().toISOString().split('T')[0];
 }
 
+function getInitialAdhkarCategory(): string {
+  if (typeof window === 'undefined') return 'morning';
+
+  try {
+    const categoryFromUrl = new URLSearchParams(window.location.search).get('category');
+    if (categoryFromUrl && ADHKAR_CATEGORIES.some((category) => category.id === categoryFromUrl)) {
+      return categoryFromUrl;
+    }
+  } catch {
+    // Keep the screen safe on browsers that restrict URL parsing.
+  }
+
+  return 'morning';
+}
+
+
 function getDateKey(daysAgo: number): string {
   const date = new Date();
   date.setDate(date.getDate() - daysAgo);
   return date.toISOString().split('T')[0];
 }
 
-function safeLocalGet(key: string): string | null {
-  try {
-    return localStorage.getItem(key);
-  } catch {
-    return null;
-  }
-}
-
-function safeLocalSet(key: string, value: string): void {
-  try {
-    localStorage.setItem(key, value);
-  } catch {
-    // Private Safari, embedded browsers, or full storage must not break Adhkar.
-  }
-}
-
 function hasAdhkarProgress(dateKey: string): boolean {
-  try {
-    const raw = safeLocalGet(`noor_adhkar_${dateKey}`);
-    if (!raw) return false;
+  const raw = localStorage.getItem(`noor_adhkar_${dateKey}`);
+  if (!raw) return false;
 
+  try {
     const parsed = JSON.parse(raw) as Record<string, number>;
     return Object.values(parsed).some((value) => Number(value) > 0);
   } catch {
@@ -117,7 +117,7 @@ function getDuaText(dua: DuaItem): string {
 
 export default function AdhkarScreen({ isLightMode }: AdhkarScreenProps) {
   const [activeTab, setActiveTab] = useState<'adhkar' | 'duas'>('adhkar');
-  const [selectedCategory, setSelectedCategory] = useState<string>('morning');
+  const [selectedCategory, setSelectedCategory] = useState<string>(() => getInitialAdhkarCategory());
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [notificationsEnabled, setNotificationsEnabled] = useState<boolean>(false);
@@ -131,7 +131,7 @@ export default function AdhkarScreen({ isLightMode }: AdhkarScreenProps) {
     setCounts(Storage.getAdhkarProgress(todayKey));
     const savedReminderSettings = getAdhkarReminderSettings();
     setReminderSettings(savedReminderSettings);
-    setNotificationsEnabled(savedReminderSettings.enabled || safeLocalGet('noor_adhkar_notif') === 'true');
+    setNotificationsEnabled(savedReminderSettings.enabled || localStorage.getItem('noor_adhkar_notif') === 'true');
     setStreak(calculateLocalStreak());
 
     const handleReminderChange = () => {
@@ -254,8 +254,8 @@ export default function AdhkarScreen({ isLightMode }: AdhkarScreenProps) {
     setReminderSettings(updatedSettings);
     saveAdhkarReminderSettings(updatedSettings);
     setNotificationsEnabled(next);
-    safeLocalSet('noor_adhkar_notif', String(next));
-    showToast(next ? 'Adhkar and Ayyamul Bid reminders enabled' : 'Reminders turned off');
+    localStorage.setItem('noor_adhkar_notif', String(next));
+    showToast(next ? 'Adhkar reminders enabled' : 'Adhkar reminders turned off');
   };
 
   const copyText = async (text: string) => {
@@ -343,7 +343,7 @@ export default function AdhkarScreen({ isLightMode }: AdhkarScreenProps) {
                     ? 'border-emerald-300 bg-emerald-500 text-white shadow-lg'
                     : 'border-white/20 bg-white/10 text-emerald-100 hover:bg-white/15'
                 }`}
-                title={notificationsEnabled ? 'Daily and Ayyamul Bid reminders enabled' : 'Enable daily and Ayyamul Bid reminders'}
+                title={notificationsEnabled ? 'Adhkar reminders enabled' : 'Enable adhkar reminders'}
               >
                 <Bell className={`h-5 w-5 ${notificationsEnabled ? 'fill-current' : ''}`} />
               </button>
@@ -369,7 +369,7 @@ export default function AdhkarScreen({ isLightMode }: AdhkarScreenProps) {
           </div>
 
           <div className={`px-5 py-4 text-xs leading-relaxed ${mutedText}`}>
-            Track your daily adhkar locally on this device. Reminders are {reminderSettings.enabled ? 'active' : 'off'} — morning {reminderSettings.morning.time}, evening {reminderSettings.evening.time}. NoorQuran also reminds you to fast Ayyamul Bid on the 13th, 14th, and 15th of every Islamic month when notifications are allowed.
+            Track your daily adhkar locally on this device. Reminders are {reminderSettings.enabled ? 'active' : 'off'} — morning {reminderSettings.morning.time}, evening {reminderSettings.evening.time}, and more times can be adjusted in Settings.
           </div>
         </div>
 

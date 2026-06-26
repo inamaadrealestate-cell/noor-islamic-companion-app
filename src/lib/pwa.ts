@@ -735,6 +735,33 @@ function timePlusMinutes(time: string, minutesToAdd: number): string | null {
   return `${String(Math.floor(normalized / 60)).padStart(2, "0")}:${String(normalized % 60).padStart(2, "0")}`;
 }
 
+function timeToMinutes(time: string): number | null {
+  const clean = cleanTimingValue(time);
+  if (!clean) return null;
+
+  const [hours, minutes] = clean.split(":").map(Number);
+  if (
+    Number.isNaN(hours) ||
+    Number.isNaN(minutes) ||
+    hours < 0 ||
+    hours > 23 ||
+    minutes < 0 ||
+    minutes > 59
+  ) {
+    return null;
+  }
+
+  return hours * 60 + minutes;
+}
+
+function isCurrentTimeInsideWindow(currentMinutes: number, startMinutes: number, endMinutes: number): boolean {
+  if (startMinutes <= endMinutes) {
+    return currentMinutes >= startMinutes && currentMinutes <= endMinutes;
+  }
+
+  return currentMinutes >= startMinutes || currentMinutes <= endMinutes;
+}
+
 function readFiredReminderKeys(): string[] {
   return asStringArray(safeParse<unknown>(safeGet(REMINDER_FIRED_KEY), []));
 }
@@ -757,6 +784,25 @@ async function fireReminderOnce(options: {
   url?: string;
 }): Promise<void> {
   const key = `${getMinuteKey()}-${options.reminderId}`;
+  if (hasReminderFired(key)) return;
+
+  const shown = await showNoorNotification({
+    title: options.title,
+    body: options.body,
+    tag: `noorquran-${options.reminderId}`,
+    url: options.url || "/?tab=adhkar",
+  });
+
+  if (shown) markReminderFired(key);
+}
+
+async function fireReminderDailyOnce(options: {
+  reminderId: string;
+  title: string;
+  body: string;
+  url?: string;
+}): Promise<void> {
+  const key = `${getTodayKey()}-${options.reminderId}`;
   if (hasReminderFired(key)) return;
 
   const shown = await showNoorNotification({
@@ -841,13 +887,13 @@ async function checkFixedTimeReminders(settings: NoorAdhkarReminderSettings, cur
       label: "Morning Adhkar",
       title: "Morning Adhkar",
       body: "Start your day with protection, gratitude, and remembrance of Allah.",
-      url: "/?tab=adhkar",
+      url: "/?tab=adhkar&category=morning",
     },
     evening: {
       label: "Evening Adhkar",
       title: "Evening Adhkar",
       body: "Complete your evening remembrance and protection adhkar.",
-      url: "/?tab=adhkar",
+      url: "/?tab=adhkar&category=evening",
     },
     sleep: {
       label: "Before Sleep Adhkar",
@@ -866,13 +912,37 @@ async function checkFixedTimeReminders(settings: NoorAdhkarReminderSettings, cur
   const slotIds: ReminderSlotId[] = ["morning", "evening", "sleep", "fridayKahf"];
   for (const slotId of slotIds) {
     const slot = settings[slotId];
-    if (!slot.enabled || slot.time !== currentTime) continue;
+    if (!slot.enabled) continue;
     if (slotId === "fridayKahf" && now.getDay() !== 5) continue;
 
-    await fireReminderOnce({
-      reminderId: slotId,
+    if (slot.time === currentTime) {
+      await fireReminderOnce({
+        reminderId: slotId,
+        title: reminderCopy[slotId].title,
+        body: reminderCopy[slotId].body,
+        url: reminderCopy[slotId].url,
+      });
+      continue;
+    }
+
+    // Smart app-entry reminder: if the user opens NoorQuran after the exact reminder minute,
+    // still remind once per day during the normal morning/evening adhkar window.
+    if (slotId !== "morning" && slotId !== "evening") continue;
+
+    const currentMinutes = timeToMinutes(currentTime);
+    const dueMinutes = timeToMinutes(slot.time);
+    const windowStart = slotId === "morning" ? timeToMinutes("05:00") : timeToMinutes("16:00");
+    const windowEnd = slotId === "morning" ? timeToMinutes("11:30") : timeToMinutes("22:30");
+    if (currentMinutes === null || dueMinutes === null || windowStart === null || windowEnd === null) continue;
+    if (currentMinutes < dueMinutes) continue;
+    if (!isCurrentTimeInsideWindow(currentMinutes, windowStart, windowEnd)) continue;
+
+    await fireReminderDailyOnce({
+      reminderId: `${slotId}-app-entry`,
       title: reminderCopy[slotId].title,
-      body: reminderCopy[slotId].body,
+      body: slotId === "morning"
+        ? "You opened NoorQuran in the morning. Complete your Morning Adhkar now."
+        : "You opened NoorQuran in the evening. Complete your Evening Adhkar now.",
       url: reminderCopy[slotId].url,
     });
   }

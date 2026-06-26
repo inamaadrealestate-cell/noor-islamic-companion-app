@@ -157,6 +157,58 @@ export const ADHKAR_CATEGORIES: DhikrCategory[] = [
         "source": "Hakim; Hisn al-Muslim",
         "virtue": "Seeking Allah's help and mercy"
       }
+      ,
+      {
+        "id": "morning_013",
+        "order": 13,
+        "arabic": "اللَّهُ لَا إِلَٰهَ إِلَّا هُوَ الْحَيُّ الْقَيُّومُ، لَا تَأْخُذُهُ سِنَةٌ وَلَا نَوْمٌ، لَهُ مَا فِي السَّمَاوَاتِ وَمَا فِي الْأَرْضِ، مَنْ ذَا الَّذِي يَشْفَعُ عِنْدَهُ إِلَّا بِإِذْنِهِ، يَعْلَمُ مَا بَيْنَ أَيْدِيهِمْ وَمَا خَلْفَهُمْ، وَلَا يُحِيطُونَ بِشَيْءٍ مِنْ عِلْمِهِ إِلَّا بِمَا شَاءَ، وَسِعَ كُرْسِيُّهُ السَّمَاوَاتِ وَالْأَرْضَ، وَلَا يَئُودُهُ حِفْظُهُمَا، وَهُوَ الْعَلِيُّ الْعَظِيمُ",
+        "transliteration": "Allahu la ilaha illa Huwa, Al-Hayyul-Qayyum. La ta'khudhuhu sinatun wa la nawm. Lahu ma fis-samawati wa ma fil-ard. Man dhal-ladhi yashfa'u indahu illa bi-idhnih. Ya'lamu ma bayna aydihim wa ma khalfahum, wa la yuhituna bi shay'in min ilmihi illa bima sha'a. Wasi'a kursiyyuhus-samawati wal-ard, wa la ya'uduhu hifdhuhuma, wa Huwal-Aliyyul-Adhim.",
+        "translation": "Allah - none has the right to be worshipped except Him, the Ever-Living, the Sustainer. Neither drowsiness nor sleep overtakes Him. To Him belongs whatever is in the heavens and whatever is on the earth. Who can intercede with Him except by His permission? He knows what is before them and what is behind them, and they encompass nothing of His knowledge except what He wills. His Kursi extends over the heavens and the earth, and preserving them does not tire Him. He is the Most High, the Most Great.",
+        "repetitions": 1,
+        "source": "Quran 2:255",
+        "virtue": "Ayat al-Kursi for morning protection"
+      },
+      {
+        "id": "morning_014",
+        "order": 14,
+        "arabic": "قُلْ هُوَ اللَّهُ أَحَدٌ، اللَّهُ الصَّمَدُ، لَمْ يَلِدْ وَلَمْ يُولَدْ، وَلَمْ يَكُنْ لَهُ كُفُوًا أَحَدٌ",
+        "transliteration": "Qul Huwallahu Ahad. Allahus-Samad. Lam yalid wa lam yulad. Wa lam yakun lahu kufuwan ahad.",
+        "translation": "Say: He is Allah, One. Allah, the Eternal Refuge. He neither begets nor is born, nor is there to Him any equivalent.",
+        "repetitions": 3,
+        "source": "Quran 112; Abu Dawud 5082; Tirmidhi 3575",
+        "virtue": "Read three times in the morning with the last two surahs"
+      },
+      {
+        "id": "morning_015",
+        "order": 15,
+        "arabic": "قُلْ أَعُوذُ بِرَبِّ الْفَلَقِ، مِنْ شَرِّ مَا خَلَقَ، وَمِنْ شَرِّ غَاسِقٍ إِذَا وَقَبَ، وَمِنْ شَرِّ النَّفَّاثَاتِ فِي الْعُقَدِ، وَمِنْ شَرِّ حَاسِدٍ إِذَا حَسَدَ",
+        "transliteration": "Qul audhu bi Rabbil-falaq, min sharri ma khalaq, wa min sharri ghasiqin idha waqab, wa min sharrin-naffathati fil-uqad, wa min sharri hasidin idha hasad.",
+        "translation": "Say: I seek refuge in the Lord of daybreak, from the evil of what He created, from the evil of darkness when it settles, from the evil of those who blow on knots, and from the evil of an envier when he envies.",
+        "repetitions": 3,
+        "source": "Quran 113; Abu Dawud 5082; Tirmidhi 3575",
+        "virtue": "Read three times in the morning for Allah's protection"
+      },
+      {
+        "id": "morning_016",
+        "order": 16,
+        "arabic": "قُلْ أَعُوذُ بِرَبِّ النَّاسِ، مَلِكِ النَّاسِ، إِلَٰهِ النَّاسِ، مِنْ شَرِّ الْوَسْوَاسِ الْخَنَّاسِ، الَّذِي يُوَسْوِسُ فِي صُدُورِ النَّاسِ، مِنَ الْجِنَّةِ وَالنَّاسِ",
+        "transliteration": "Qul audhu bi Rabbin-nas, Malikin-nas, Ilahin-nas, min sharril-waswasil-khannas, alladhi yuwaswisu fi sudurin-nas, minal-jinnati wan-nas.",
+        "translation": "Say: I seek refuge in the Lord of mankind, the King of mankind, the God of mankind, from the evil of the retreating whisperer who whispers into the hearts of mankind, from among jinn and mankind.",
+        "repetitions": 3,
+        "source": "Quran 114; Abu Dawud 5082; Tirmidhi 3575",
+        "virtue": "Read three times in the morning with Al-Ikhlas and Al-Falaq"
+      },
+      {
+        "id": "morning_017",
+        "order": 17,
+        "arabic": "اللَّهُمَّ إِنِّي أَسْأَلُكَ الْعَافِيَةَ فِي الدُّنْيَا وَالْآخِرَةِ، اللَّهُمَّ إِنِّي أَسْأَلُكَ الْعَفْوَ وَالْعَافِيَةَ فِي دِينِي وَدُنْيَايَ وَأَهْلِي وَمَالِي، اللَّهُمَّ اسْتُرْ عَوْرَاتِي وَآمِنْ رَوْعَاتِي، اللَّهُمَّ احْفَظْنِي مِنْ بَيْنِ يَدَيَّ، وَمِنْ خَلْفِي، وَعَنْ يَمِينِي، وَعَنْ شِمَالِي، وَمِنْ فَوْقِي، وَأَعُوذُ بِعَظَمَتِكَ أَنْ أُغْتَالَ مِنْ تَحْتِي",
+        "transliteration": "Allahumma inni as'alukal-afiyah fid-dunya wal-akhirah. Allahumma inni as'alukal-afwa wal-afiyah fi dini wa dunyaya wa ahli wa mali. Allahummastur awrati wa amin raw'ati. Allahummahfazni min bayni yadayya, wa min khalfi, wa an yamini, wa an shimali, wa min fawqi, wa audhu bi adhamatika an ughtala min tahti.",
+        "translation": "O Allah, I ask You for well-being in this world and the Hereafter. O Allah, I ask You for pardon and well-being in my religion, my worldly life, my family and my wealth. O Allah, conceal my faults and calm my fears. O Allah, protect me from in front of me, from behind me, from my right, from my left and from above me, and I seek refuge in Your greatness from being taken unexpectedly from beneath me.",
+        "repetitions": 1,
+        "source": "Abu Dawud 5074; Ibn Majah 3871",
+        "virtue": "A comprehensive morning dua for safety and well-being"
+      }
+
     ]
   },
   {
@@ -286,6 +338,58 @@ export const ADHKAR_CATEGORIES: DhikrCategory[] = [
         "source": "Abu Dawud 3893; Tirmidhi 3528",
         "virtue": "Protection before sleep or at night"
       }
+      ,
+      {
+        "id": "evening_013",
+        "order": 13,
+        "arabic": "اللَّهُ لَا إِلَٰهَ إِلَّا هُوَ الْحَيُّ الْقَيُّومُ، لَا تَأْخُذُهُ سِنَةٌ وَلَا نَوْمٌ، لَهُ مَا فِي السَّمَاوَاتِ وَمَا فِي الْأَرْضِ، مَنْ ذَا الَّذِي يَشْفَعُ عِنْدَهُ إِلَّا بِإِذْنِهِ، يَعْلَمُ مَا بَيْنَ أَيْدِيهِمْ وَمَا خَلْفَهُمْ، وَلَا يُحِيطُونَ بِشَيْءٍ مِنْ عِلْمِهِ إِلَّا بِمَا شَاءَ، وَسِعَ كُرْسِيُّهُ السَّمَاوَاتِ وَالْأَرْضَ، وَلَا يَئُودُهُ حِفْظُهُمَا، وَهُوَ الْعَلِيُّ الْعَظِيمُ",
+        "transliteration": "Allahu la ilaha illa Huwa, Al-Hayyul-Qayyum. La ta'khudhuhu sinatun wa la nawm. Lahu ma fis-samawati wa ma fil-ard. Man dhal-ladhi yashfa'u indahu illa bi-idhnih. Ya'lamu ma bayna aydihim wa ma khalfahum, wa la yuhituna bi shay'in min ilmihi illa bima sha'a. Wasi'a kursiyyuhus-samawati wal-ard, wa la ya'uduhu hifdhuhuma, wa Huwal-Aliyyul-Adhim.",
+        "translation": "Allah - none has the right to be worshipped except Him, the Ever-Living, the Sustainer. Neither drowsiness nor sleep overtakes Him. To Him belongs whatever is in the heavens and whatever is on the earth. Who can intercede with Him except by His permission? He knows what is before them and what is behind them, and they encompass nothing of His knowledge except what He wills. His Kursi extends over the heavens and the earth, and preserving them does not tire Him. He is the Most High, the Most Great.",
+        "repetitions": 1,
+        "source": "Quran 2:255",
+        "virtue": "Ayat al-Kursi for evening protection"
+      },
+      {
+        "id": "evening_014",
+        "order": 14,
+        "arabic": "قُلْ هُوَ اللَّهُ أَحَدٌ، اللَّهُ الصَّمَدُ، لَمْ يَلِدْ وَلَمْ يُولَدْ، وَلَمْ يَكُنْ لَهُ كُفُوًا أَحَدٌ",
+        "transliteration": "Qul Huwallahu Ahad. Allahus-Samad. Lam yalid wa lam yulad. Wa lam yakun lahu kufuwan ahad.",
+        "translation": "Say: He is Allah, One. Allah, the Eternal Refuge. He neither begets nor is born, nor is there to Him any equivalent.",
+        "repetitions": 3,
+        "source": "Quran 112; Abu Dawud 5082; Tirmidhi 3575",
+        "virtue": "Read three times in the evening with the last two surahs"
+      },
+      {
+        "id": "evening_015",
+        "order": 15,
+        "arabic": "قُلْ أَعُوذُ بِرَبِّ الْفَلَقِ، مِنْ شَرِّ مَا خَلَقَ، وَمِنْ شَرِّ غَاسِقٍ إِذَا وَقَبَ، وَمِنْ شَرِّ النَّفَّاثَاتِ فِي الْعُقَدِ، وَمِنْ شَرِّ حَاسِدٍ إِذَا حَسَدَ",
+        "transliteration": "Qul audhu bi Rabbil-falaq, min sharri ma khalaq, wa min sharri ghasiqin idha waqab, wa min sharrin-naffathati fil-uqad, wa min sharri hasidin idha hasad.",
+        "translation": "Say: I seek refuge in the Lord of daybreak, from the evil of what He created, from the evil of darkness when it settles, from the evil of those who blow on knots, and from the evil of an envier when he envies.",
+        "repetitions": 3,
+        "source": "Quran 113; Abu Dawud 5082; Tirmidhi 3575",
+        "virtue": "Read three times in the evening for Allah's protection"
+      },
+      {
+        "id": "evening_016",
+        "order": 16,
+        "arabic": "قُلْ أَعُوذُ بِرَبِّ النَّاسِ، مَلِكِ النَّاسِ، إِلَٰهِ النَّاسِ، مِنْ شَرِّ الْوَسْوَاسِ الْخَنَّاسِ، الَّذِي يُوَسْوِسُ فِي صُدُورِ النَّاسِ، مِنَ الْجِنَّةِ وَالنَّاسِ",
+        "transliteration": "Qul audhu bi Rabbin-nas, Malikin-nas, Ilahin-nas, min sharril-waswasil-khannas, alladhi yuwaswisu fi sudurin-nas, minal-jinnati wan-nas.",
+        "translation": "Say: I seek refuge in the Lord of mankind, the King of mankind, the God of mankind, from the evil of the retreating whisperer who whispers into the hearts of mankind, from among jinn and mankind.",
+        "repetitions": 3,
+        "source": "Quran 114; Abu Dawud 5082; Tirmidhi 3575",
+        "virtue": "Read three times in the evening with Al-Ikhlas and Al-Falaq"
+      },
+      {
+        "id": "evening_017",
+        "order": 17,
+        "arabic": "اللَّهُمَّ إِنِّي أَسْأَلُكَ الْعَافِيَةَ فِي الدُّنْيَا وَالْآخِرَةِ، اللَّهُمَّ إِنِّي أَسْأَلُكَ الْعَفْوَ وَالْعَافِيَةَ فِي دِينِي وَدُنْيَايَ وَأَهْلِي وَمَالِي، اللَّهُمَّ اسْتُرْ عَوْرَاتِي وَآمِنْ رَوْعَاتِي، اللَّهُمَّ احْفَظْنِي مِنْ بَيْنِ يَدَيَّ، وَمِنْ خَلْفِي، وَعَنْ يَمِينِي، وَعَنْ شِمَالِي، وَمِنْ فَوْقِي، وَأَعُوذُ بِعَظَمَتِكَ أَنْ أُغْتَالَ مِنْ تَحْتِي",
+        "transliteration": "Allahumma inni as'alukal-afiyah fid-dunya wal-akhirah. Allahumma inni as'alukal-afwa wal-afiyah fi dini wa dunyaya wa ahli wa mali. Allahummastur awrati wa amin raw'ati. Allahummahfazni min bayni yadayya, wa min khalfi, wa an yamini, wa an shimali, wa min fawqi, wa audhu bi adhamatika an ughtala min tahti.",
+        "translation": "O Allah, I ask You for well-being in this world and the Hereafter. O Allah, I ask You for pardon and well-being in my religion, my worldly life, my family and my wealth. O Allah, conceal my faults and calm my fears. O Allah, protect me from in front of me, from behind me, from my right, from my left and from above me, and I seek refuge in Your greatness from being taken unexpectedly from beneath me.",
+        "repetitions": 1,
+        "source": "Abu Dawud 5074; Ibn Majah 3871",
+        "virtue": "A comprehensive evening dua for safety and well-being"
+      }
+
     ]
   },
   {

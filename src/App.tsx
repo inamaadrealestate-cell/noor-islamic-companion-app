@@ -81,6 +81,15 @@ function isValidTab(tab: string | null): tab is AppTab {
 }
 
 function getInitialTab(): AppTab {
+  if (typeof window !== "undefined") {
+    try {
+      const tabFromUrl = new URLSearchParams(window.location.search).get("tab");
+      if (isValidTab(tabFromUrl)) return tabFromUrl;
+    } catch {
+      // Ignore restricted browser URL parsing errors.
+    }
+  }
+
   const savedTab = safeLocalGet(LAST_TAB_KEY);
   return isValidTab(savedTab) ? savedTab : "home";
 }
